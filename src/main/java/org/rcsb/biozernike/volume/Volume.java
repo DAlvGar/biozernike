@@ -13,7 +13,8 @@ public class Volume {
 	public static final String DEFAULT_RESIDUE_NAME = "ALA";
 
 	/**
-	 * The default radius multiplier as documented in Guzenko et al, PLoS CB 2020. See "BioZernike descriptors" section
+	 * The default radius multiplier as documented in Guzenko et al, PLoS CB 2020.
+	 * See "BioZernike descriptors" section
 	 */
 	public static final double DEFAULT_RADIUS_MULTIPLIER = 1.8;
 
@@ -24,12 +25,12 @@ public class Volume {
 
 	/**
 	 * if the target volume is larger than maxVolumeSize^3, it will be downscaled
- 	 */
+	 */
 	private int maxVolumeSize;
 
 	/**
 	 * if the target volume is smaller than minVolumeSize^3, it will be upscaled
- 	 */
+	 */
 	private int minVolumeSize;
 
 	private int minInterfaceVoxels;
@@ -44,9 +45,9 @@ public class Volume {
 	private double originalVolumeMass = 0;
 
 	private double[] voxelArray = null;
-	private int[] dimensions = {0, 0, 0};
-	private double[] center = {0, 0, 0};
-	private double[] corner = {0, 0, 0};
+	private int[] dimensions = { 0, 0, 0 };
+	private double[] center = { 0, 0, 0 };
+	private double[] corner = { 0, 0, 0 };
 	private double radiusVar = 0;
 	private double radiusMax = 0;
 
@@ -65,10 +66,10 @@ public class Volume {
 
 	public Volume(Volume other) {
 		voxelArray = new double[other.voxelArray.length];
-		System.arraycopy( other.voxelArray, 0, this.voxelArray, 0, other.voxelArray.length);
-		System.arraycopy( other.dimensions, 0, this.dimensions, 0, other.dimensions.length);
-		System.arraycopy( other.center, 0, this.center, 0, other.center.length);
-		System.arraycopy( other.corner, 0, this.corner, 0, other.corner.length);
+		System.arraycopy(other.voxelArray, 0, this.voxelArray, 0, other.voxelArray.length);
+		System.arraycopy(other.dimensions, 0, this.dimensions, 0, other.dimensions.length);
+		System.arraycopy(other.center, 0, this.center, 0, other.center.length);
+		System.arraycopy(other.corner, 0, this.corner, 0, other.corner.length);
 
 		this.originalVolumeMass = other.originalVolumeMass;
 		this.radiusVar = other.radiusVar;
@@ -113,11 +114,14 @@ public class Volume {
 	}
 
 	/**
-	 * Create a volume given the dimensions, the array of voxel values and the grid width.
-	 * Note that the center will not be calculated automatically. The caller must call {@link #updateCenter()} subsequently
- 	 * @param dimensions array of length 3 with the dimensions
+	 * Create a volume given the dimensions, the array of voxel values and the grid
+	 * width.
+	 * Note that the center will not be calculated automatically. The caller must
+	 * call {@link #updateCenter()} subsequently
+	 * 
+	 * @param dimensions array of length 3 with the dimensions
 	 * @param voxelArray flattened array with the density values
-	 * @param gridWidth the grid width in Angstroms
+	 * @param gridWidth  the grid width in Angstroms
 	 */
 	public void createFromData(int[] dimensions, double[] voxelArray, double gridWidth) {
 		this.dimensions = dimensions;
@@ -130,12 +134,12 @@ public class Volume {
 		Arrays.fill(resNames, DEFAULT_RESIDUE_NAME);
 
 		double[] resCoefs = new double[reprCoords.length];
-		Arrays.fill(resCoefs,1.0);
+		Arrays.fill(resCoefs, 1.0);
 
 		BoundingBox bb = new BoundingBox((Bounds) null);
 		bb.combine(reprCoords);
 
-		create(reprCoords,resNames, resCoefs, bb, getAutoGridWidth(bb));
+		create(reprCoords, resNames, resCoefs, bb, getAutoGridWidth(bb));
 	}
 
 	public void create(Point3d[] reprCoords, double gridWidth) {
@@ -143,7 +147,7 @@ public class Volume {
 		Arrays.fill(resNames, DEFAULT_RESIDUE_NAME);
 
 		double[] resCoefs = new double[reprCoords.length];
-		Arrays.fill(resCoefs,1.0);
+		Arrays.fill(resCoefs, 1.0);
 
 		BoundingBox bb = new BoundingBox((Bounds) null);
 		bb.combine(reprCoords);
@@ -153,32 +157,32 @@ public class Volume {
 
 	public void create(Point3d[] reprCoords, String[] resNames) {
 		double[] resCoefs = new double[reprCoords.length];
-		Arrays.fill(resCoefs,1.0);
+		Arrays.fill(resCoefs, 1.0);
 
 		BoundingBox bb = new BoundingBox((Bounds) null);
 		bb.combine(reprCoords);
 
-		create(reprCoords,resNames, resCoefs, bb, getAutoGridWidth(bb));
+		create(reprCoords, resNames, resCoefs, bb, getAutoGridWidth(bb));
 	}
 
 	public void create(Point3d[] reprCoords, String[] resNames, double gridWidth) {
 		double[] resCoefs = new double[reprCoords.length];
-		Arrays.fill(resCoefs,1.0);
+		Arrays.fill(resCoefs, 1.0);
 
 		BoundingBox bb = new BoundingBox((Bounds) null);
 		bb.combine(reprCoords);
 
-		create(reprCoords,resNames, resCoefs, bb, gridWidth);
+		create(reprCoords, resNames, resCoefs, bb, gridWidth);
 	}
 
 	public void create(Point3d[] reprCoords, String[] resNames, double[] resCoefs) {
 		BoundingBox bb = new BoundingBox((Bounds) null);
 		bb.combine(reprCoords);
-		create(reprCoords,resNames, resCoefs, bb, getAutoGridWidth(bb));
+		create(reprCoords, resNames, resCoefs, bb, getAutoGridWidth(bb));
 	}
 
 	public void create(Point3d[] reprCoords, String[] resNames, double[] resCoefs, BoundingBox bb) {
-		create(reprCoords,resNames,resCoefs, bb, getAutoGridWidth(bb));
+		create(reprCoords, resNames, resCoefs, bb, getAutoGridWidth(bb));
 	}
 
 	public void create(Point3d[] reprCoords, String[] resNames, double[] resCoefs, BoundingBox bb, double gridWidth) {
@@ -201,11 +205,13 @@ public class Volume {
 		createFromInterface(reprCoords1, reprCoords2, resNames1, resNames2, 0);
 	}
 
-	public void createFromInterface(Point3d[] reprCoords1, Point3d[] reprCoords2, String[] resNames1, String[] resNames2) {
+	public void createFromInterface(Point3d[] reprCoords1, Point3d[] reprCoords2, String[] resNames1,
+			String[] resNames2) {
 		createFromInterface(reprCoords1, reprCoords2, resNames1, resNames2, 0);
 	}
 
-	public void createFromInterface(Point3d[] reprCoords1, Point3d[] reprCoords2, String[] resNames1, String[] resNames2, double gridWidth) {
+	public void createFromInterface(Point3d[] reprCoords1, Point3d[] reprCoords2, String[] resNames1,
+			String[] resNames2, double gridWidth) {
 
 		reset();
 
@@ -236,8 +242,8 @@ public class Volume {
 			this.gridWidth = getAutoGridWidth(bb);
 		}
 
-		double[] resCoefs = new double[Math.max(reprCoords1.length,reprCoords2.length)];
-		Arrays.fill(resCoefs,1.0);
+		double[] resCoefs = new double[Math.max(reprCoords1.length, reprCoords2.length)];
+		Arrays.fill(resCoefs, 1.0);
 
 		double[] chain1Array = fillVolume(reprCoords1, resNames1, resCoefs, bb);
 		double[] chain2Array = fillVolume(reprCoords2, resNames2, resCoefs, bb);
@@ -291,12 +297,12 @@ public class Volume {
 
 		int maxBoxSize = ResidueVolumeCache.maxBoxSize.get(gridWidth);
 
-		this.dimensions = new int[]{
+		this.dimensions = new int[] {
 				(int) Math.ceil((pDims.x) / gridWidth) + maxBoxSize,
 				(int) Math.ceil((pDims.y) / gridWidth) + maxBoxSize,
-				(int) Math.ceil((pDims.z) / gridWidth) + maxBoxSize};
+				(int) Math.ceil((pDims.z) / gridWidth) + maxBoxSize };
 
-		corner = new double[]{
+		corner = new double[] {
 				pMin.x - maxBoxSize * gridWidth / 2.0,
 				pMin.y - maxBoxSize * gridWidth / 2.0,
 				pMin.z - maxBoxSize * gridWidth / 2.0
@@ -311,20 +317,21 @@ public class Volume {
 			Point3d atom = reprCoords[indAtom];
 
 			String resName = resNames[indAtom];
-			double[] coords = {atom.x, atom.y, atom.z};
-			double weightMultiplier = (resCoefs==null)?1:resCoefs[indAtom];
+			double[] coords = { atom.x, atom.y, atom.z };
+			double weightMultiplier = (resCoefs == null) ? 1 : resCoefs[indAtom];
 
-			residuesNominalWeight += VolumeConstants.getWeight(resName)*weightMultiplier;
+			residuesNominalWeight += VolumeConstants.getWeight(resName) * weightMultiplier;
 			ResidueVolume resBox = ResidueVolumeCache.get(gridWidth, resName);
 			int boxDim = resBox.size;
 			int boxDim2 = boxDim * boxDim;
 			int[] coordsBoxCorner = new int[3];
 
 			for (int i = 0; i < 3; i++) {
-				coordsBoxCorner[i] = (int) Math.round((coords[i] - corner[i]) / gridWidth - resBox.size/2.0);
+				coordsBoxCorner[i] = (int) Math.round((coords[i] - corner[i]) / gridWidth - resBox.size / 2.0);
 			}
 
-			int zVolumeInd = (coordsBoxCorner[2] * dimensions[1] + coordsBoxCorner[1]) * dimensions[0] + coordsBoxCorner[0];
+			int zVolumeInd = (coordsBoxCorner[2] * dimensions[1] + coordsBoxCorner[1]) * dimensions[0]
+					+ coordsBoxCorner[0];
 			int zBoxInd = 0;
 
 			for (int zBox = 0; zBox < boxDim; zBox++) {
@@ -336,7 +343,7 @@ public class Volume {
 					int flatBoxInd = yBoxInd;
 
 					for (int xBox = 0; xBox < boxDim; xBox++) {
-						structureVolume[flatVolumeInd] += resBox.volume[flatBoxInd]*weightMultiplier;
+						structureVolume[flatVolumeInd] += resBox.volume[flatBoxInd] * weightMultiplier;
 						flatVolumeInd++;
 						flatBoxInd++;
 					}
@@ -419,7 +426,7 @@ public class Volume {
 	private int trim(double radius) {
 		double sqrRadius = radius * radius;
 		int nZeroed = 0;
-		//(z * dimensions[1] + y) * dimensions[0] + x
+		// (z * dimensions[1] + y) * dimensions[0] + x
 		int zInd = 0;
 		int dims01 = dimensions[0] * dimensions[1];
 
@@ -436,7 +443,7 @@ public class Volume {
 
 				for (int x = 0; x < dimensions[0]; ++x) {
 					double voxelWeight = voxelArray[flatInd];
-//					assert voxelWeight == getValue(x,y,z);
+					// assert voxelWeight == getValue(x,y,z);
 					if (voxelWeight > 0) {
 						double mx = x - center[0];
 						double sqRadTmp = mzy2 + mx * mx;
@@ -452,25 +459,30 @@ public class Volume {
 			}
 			zInd += dims01;
 		}
-//		System.out.println("Zeroed: "+nZeroed+", Sum of all new: "+volumeMass);
+		// System.out.println("Zeroed: "+nZeroed+", Sum of all new: "+volumeMass);
 
 		return nZeroed;
 	}
 
 	/**
-	 * Apply a lower threshold, setting to 0 voxels below the threshold. And normalize given a multiplier.
+	 * Apply a lower threshold, setting to 0 voxels below the threshold. And
+	 * normalize given a multiplier.
 	 * <p>
-	 * Note that the center will not be calculated automatically. The caller must call {@link #updateCenter()} subsequently
-	 * @param contourThreshold a lower threshold of density values to consider. Values below this threshold will be set to 0,
-	 *                         if below 0, then parameter is ignore and instead 3x std-deviation used
-	 * @param multiplier a multiplier value to normalise the density values
+	 * Note that the center will not be calculated automatically. The caller must
+	 * call {@link #updateCenter()} subsequently
+	 * 
+	 * @param contourThreshold a lower threshold of density values to consider.
+	 *                         Values below this threshold will be set to 0,
+	 *                         if below 0, then parameter is ignore and instead 3x
+	 *                         std-deviation used
+	 * @param multiplier       a multiplier value to normalise the density values
 	 */
 	public void applyContourAndNormalize(double contourThreshold, double multiplier) {
 		double sumval = 0;
 		int nVoxels = 0;
 
-		for (int i = 0; i<voxelArray.length; i++) {
-			if(voxelArray[i] <= contourThreshold) {
+		for (int i = 0; i < voxelArray.length; i++) {
+			if (voxelArray[i] <= contourThreshold) {
 				voxelArray[i] = 0;
 				continue;
 			}
@@ -479,18 +491,22 @@ public class Volume {
 			sumval += voxelArray[i];
 		}
 
-		double normCoef = nVoxels*multiplier/sumval;
-		for (int i = 0; i<voxelArray.length; i++) {
+		double normCoef = nVoxels * multiplier / sumval;
+		for (int i = 0; i < voxelArray.length; i++) {
 			voxelArray[i] *= normCoef;
 		}
 	}
 
 	/**
-	 * Apply a lower threshold expressed in units of standard deviations. And normalize given a multiplier.
+	 * Apply a lower threshold expressed in units of standard deviations. And
+	 * normalize given a multiplier.
 	 * <p>
-	 * Note that the center will not be calculated automatically. The caller must call {@link #updateCenter()} subsequently
-	 * @param stdDevMultiplier value to multiply the standard deviation that will be the contour threshold
-	 * @param multiplier a multiplier value to normalise the density values
+	 * Note that the center will not be calculated automatically. The caller must
+	 * call {@link #updateCenter()} subsequently
+	 * 
+	 * @param stdDevMultiplier value to multiply the standard deviation that will be
+	 *                         the contour threshold
+	 * @param multiplier       a multiplier value to normalise the density values
 	 */
 	public void applyContourStdAndNormalize(double stdDevMultiplier, double multiplier) {
 		StandardDeviation standardDeviation = new StandardDeviation();
@@ -500,14 +516,17 @@ public class Volume {
 
 	/**
 	 * Convert all density values to positive (taking absolute value).
-	 * Note that EMDB maps usually have negative values. This will convert those to positive, which is better suited for
-	 * BioZernike descriptors calculation, especially when comparing to volumes that are calculated from
+	 * Note that EMDB maps usually have negative values. This will convert those to
+	 * positive, which is better suited for
+	 * BioZernike descriptors calculation, especially when comparing to volumes that
+	 * are calculated from
 	 * coordinates (where all density is positive).
 	 * <p>
-	 * Note that the center will not be calculated automatically. The caller must call {@link #updateCenter()} subsequently
+	 * Note that the center will not be calculated automatically. The caller must
+	 * call {@link #updateCenter()} subsequently
 	 */
 	public void positivize() {
-		for (int i = 0; i<voxelArray.length; i++) {
+		for (int i = 0; i < voxelArray.length; i++) {
 			voxelArray[i] = Math.abs(voxelArray[i]);
 		}
 	}
@@ -542,6 +561,7 @@ public class Volume {
 
 	/**
 	 * Get the radius of gyration in voxel units
+	 * 
 	 * @return the radius of gyration in voxel units
 	 */
 	public double getRadiusVarVolume() {
@@ -550,6 +570,7 @@ public class Volume {
 
 	/**
 	 * Get the maximum radius in voxel units
+	 * 
 	 * @return the maximum radius in voxel units
 	 */
 	public double getRadiusMaxVolume() {
@@ -562,6 +583,7 @@ public class Volume {
 
 	/**
 	 * Get the radius of gyration in Angstroms
+	 * 
 	 * @return the radius of gyration in Angstroms
 	 */
 	public double getRadiusVarReal() {
@@ -570,6 +592,7 @@ public class Volume {
 
 	/**
 	 * Get the maximum radius in Angstroms
+	 * 
 	 * @return the maximum radius in Angstroms
 	 */
 	public double getRadiusMaxReal() {
@@ -594,10 +617,11 @@ public class Volume {
 
 	/**
 	 * Get the volume's center coordinate in Angstrom units
+	 * 
 	 * @return the center coordinate
 	 */
 	public double[] getCenterReal() {
-		return new double[]{
+		return new double[] {
 				center[0] * gridWidth + corner[0],
 				center[1] * gridWidth + corner[1],
 				center[2] * gridWidth + corner[2]
@@ -606,6 +630,7 @@ public class Volume {
 
 	/**
 	 * Get the grid width in Angstroms
+	 * 
 	 * @return the grid width in Angstroms
 	 */
 	public double getGridWidth() {
@@ -656,4 +681,39 @@ public class Volume {
 		this.atomDistancePadding = atomDistancePadding;
 	}
 
+	public void setCorner(double[] corner) {
+		this.corner = corner;
+	}
+
+	public double[] getCorner() {
+		return this.corner;
+	}
+
+	public void flipValues() {
+		double[] data = this.getVoxelArray();
+		for (int i = 0; i < data.length; i++) {
+			data[i] = data[i] * -1;
+		}
+	}
+	
+	public void capMin(double cut){
+		for (int i=0; i<voxelArray.length; i++){
+			double v = voxelArray[i];
+			voxelArray[i] = v >= cut ? v : cut;
+		}
+	}
+
+	public void capMax(double cut){
+		for (int i=0; i<voxelArray.length; i++){
+			double v = voxelArray[i];
+			voxelArray[i] = v <= cut ? v : cut;
+		}
+	}
+
+	// Set all non zero values to 1
+	public void setNonZeroToOne(){
+		for (int i=0; i<voxelArray.length; i++){
+			voxelArray[i] = voxelArray[i] == 0 ? 0 : 1;
+		}
+	}
 }

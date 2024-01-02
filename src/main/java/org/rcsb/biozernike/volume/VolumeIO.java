@@ -47,6 +47,9 @@ public class VolumeIO {
 		os.writeInt(i);
 
 		/* NCSTART, NRSTART, NSSTART */
+		//os.writeFloat((float)volume.getCorner()[0]);
+		//os.writeFloat((float)volume.getCorner()[1]);
+		//os.writeFloat((float)volume.getCorner()[2]);
 		os.writeInt(0);
 		os.writeInt(0);
 		os.writeInt(0);
@@ -129,9 +132,9 @@ public class VolumeIO {
 				os.writeInt(0);
 			}
 			/* ORIGIN */
-			os.writeFloat(0);
-			os.writeFloat(0);
-			os.writeFloat(0);
+			os.writeFloat((float)volume.getCorner()[0]);
+			os.writeFloat((float)volume.getCorner()[1]);
+			os.writeFloat((float)volume.getCorner()[2]);
 		}
 
 		/* MAP, MACHST */

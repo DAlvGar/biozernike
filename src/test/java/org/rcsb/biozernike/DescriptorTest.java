@@ -14,12 +14,15 @@ import org.rcsb.biozernike.descriptor.Descriptor;
 import org.rcsb.biozernike.descriptor.DescriptorConfig;
 import org.rcsb.biozernike.descriptor.DescriptorMode;
 import org.rcsb.biozernike.volume.MapFileType;
+import org.rcsb.biozernike.volume.OpenDXIO;
 import org.rcsb.biozernike.volume.Volume;
 import org.rcsb.biozernike.volume.VolumeIO;
 import org.rcsb.biozernike.zernike.ZernikeMoments;
 
 import javax.vecmath.Matrix4d;
 import javax.vecmath.Point3d;
+
+import java.io.File;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -143,10 +146,15 @@ public class DescriptorTest {
 		// some hardcoded scaling coefficients for the EM volume (as we do not control the density values)
 		InputStream is = DescriptorTest.class.getResourceAsStream("/emd_3186.map");
 		Volume volumeEM = VolumeIO.read(is, MapFileType.MRC);
+		OpenDXIO.write("emd_transform.dx", volumeEM);
 		volumeEM.positivize();
 		volumeEM.applyContourAndNormalize(0.0176, 757);
 		volumeEM.updateCenter();
 		volumeEM.setRadiusVarMult(1.64);
+		File of = new File("emd_updated.mrc");
+		System.err.println(String.format("Center: %.3f %.3f %.3f ", volumeEM.getCenterReal()[0], volumeEM.getCenterReal()[1], volumeEM.getCenterReal()[2]));
+		VolumeIO.write(volumeEM, of, MapFileType.MRC);
+		OpenDXIO.write("emd_update.dx", volumeEM);
 
 		InvariantNorm normalizationEM = new InvariantNorm(volumeEM,6);
 
@@ -157,6 +165,9 @@ public class DescriptorTest {
 		Point3d[] reprPoints = Calc.atomsToPoints(reprAtoms);
 		String[] resNames = Arrays.stream(reprAtoms).map(a -> a.getGroup().getPDBName()).toArray(String[]::new);
 		volumeStructure.create(reprPoints, resNames);
+		File osf = new File("1hss_vol.mrc");
+		VolumeIO.write(volumeStructure, osf, MapFileType.MRC);
+		OpenDXIO.write("1hss_vol.dx", volumeStructure);
 
 		InvariantNorm normalizationStructure = new InvariantNorm(volumeStructure, 6);
 
@@ -188,4 +199,26 @@ public class DescriptorTest {
 //		}
 
 	}
+
+	/* @Test
+	public void testReconstruction() throws Exception {
+		Structure structure = StructureIO.getStructure("1HHS.A");
+		//try (PrintWriter out = new PrintWriter("1HHS.A.pdb")) {
+		//	out.println(structure.toPDB());
+		//}
+		Volume volumeStructure = new Volume();
+		Atom[] reprAtoms = StructureTools.getRepresentativeAtomArray(structure);
+		Point3d[] reprPoints = Calc.atomsToPoints(reprAtoms);
+		String[] resNames = Arrays.stream(reprAtoms).map(a -> a.getGroup().getPDBName()).toArray(String[]::new);
+		volumeStructure.create(reprPoints, resNames);
+		System.err.println(String.format("Center: %.3f %.3f %.3f ", volumeStructure.getCenterReal()[0], volumeStructure.getCenterReal()[1], volumeStructure.getCenterReal()[2]));
+		System.err.println(String.format("Origin: %.3f %.3f %.3f ", volumeStructure.getCorner()[0], volumeStructure.getCorner()[1], volumeStructure.getCorner()[2]));
+		File of = new File("1hss.A.mrc");
+		VolumeIO.write(volumeStructure, of, MapFileType.MRC);
+		InvariantNorm normalizationStructure = new InvariantNorm(volumeStructure,6);
+		Volume reconstructVolume = normalizationStructure.reconstruct(0,9,0,100);
+		File osf = new File("1hss_reconstruction.mrc");
+		VolumeIO.write(reconstructVolume, osf, MapFileType.MRC);
+		OpenDXIO.write("1hss_reconstruction_dx.dx", reconstructVolume);
+	} */
 }

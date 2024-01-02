@@ -16,7 +16,7 @@ public class GeometricMoments {
 	private final double[] voxelArray;
 	private final double[] center;
 	private final int[] volumeDims;
-	private final double scale;
+	public final double scale;
 	private final int maxOrder;
 	private final List<List<List<Double>>> moments;
 	private double[][] samples;
