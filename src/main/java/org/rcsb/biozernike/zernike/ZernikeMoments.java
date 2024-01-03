@@ -5,11 +5,12 @@ import org.rcsb.biozernike.volume.Volume;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import static java.lang.Math.abs;
+import static java.lang.Math.pow;
 
 /**
  * Class to hold the 3D Zernike moments of a given volume.
@@ -230,87 +231,135 @@ public class ZernikeMoments {
 		return unFlattenMomentsComplex(flatMomentsComplex, maxOrder);
 	}
 
-	public Volume reconstructVolume(int minN, int maxN, int minL, int maxL) {
 
-		int dimX = volume.getDimensions()[0];
-		int dimY = volume.getDimensions()[1];
-		int dimZ = volume.getDimensions()[2];
-		int dim0 = dimX * dimY;
+	public static Volume reconstructVolume(ZernikeMoments zm, int dim, int _maxN, boolean useCache, boolean saveCache) throws Exception {
+		int dimX = dim;
+		int dimY = dim;
+		int dimZ = dim;
+		int volume_size = dimX*dimY*dimZ;
+		double center = dim/2.0;
+		//scaling
+		double scale = 2.0/dim;
 
-		double scale = gm.scale;
+		boolean cache_available = false;
 
-		Volume reconstructedVolume = new Volume();
-		reconstructedVolume.createFromData(volume.getDimensions(), new double[dimX * dimY * dimZ],
-				volume.getGridWidth());
-		reconstructedVolume.setCorner(volume.getCorner());
+		//translation
+		double vx = center;
+		double vy = center;
+		double vz = center;
 
-		double vx = volume.getCenterVolume()[0];
-		double vy = volume.getCenterVolume()[1];
-		double vz = volume.getCenterVolume()[2];
+		double[] point = new double[3];
 
-		if (maxN == 100) {
-			maxN = maxOrder; // Assuming maxOrder is the maximum order in ZernikeMoments
-		}
+		double dist_threshold = 1;
+		double[] _grid = new double[dimX*dimY*dimZ];
 
-		for (int x = 0; x < dimX; ++x) {
-			for (int y = 0; y < dimY; ++y) {
-				int ydim = y * dimX;
-				for (int z = 0; z < dimZ; ++z) {
-					double[] point = new double[3];
-
-					point[0] = ((double) x - vx) * scale;
-					point[1] = ((double) y - vy) * scale;
-					point[2] = ((double) z - vz) * scale;
-
-					if (point[0] * point[0] + point[1] * point[1] + point[2] * point[2] > 1.0) {
-						continue;
+		if (useCache) {
+			Map<Integer, Map<Integer, Map<Integer, Complex[]>>> zpN = ReconstructionCache.readZpCache();
+			for (int n=0; n<=_maxN; ++n) {
+				int maxK = n / 2;
+				for (int k = 0; k <= maxK; ++k) {
+					int l = n - 2 * k;
+					int li = l / 2;
+					for (int m = -l; m <= l; ++m) {
+						Complex[] zp_xyz = zpN.get(n).get(l).get(m);
+						Complex mom = zm.getMoment(n, li, m);
+						for (int flat_ind = 0; flat_ind < volume_size; flat_ind++) {
+							_grid[flat_ind] += mom.mul(zp_xyz[flat_ind]).getReal();
+						}
 					}
+				}
+			}
+		} else {
 
-					Complex fVal = new Complex(0, 0);
+			Map<Integer, Map<Integer, Map<Integer, Complex[]>>> zpN = new HashMap<>();
+			for (int n = 0; n <= _maxN; ++n) {
 
-					for (int n = minN; n <= maxN; ++n) {
-						int maxK = n / 2;
-						for (int k = 0; k <= maxK; ++k) {
-							for (int nu = 0; nu <= k; ++nu) {
-								int l = n - 2 * k;
-								if (l < minL || l > maxL) {
+				Map<Integer, Map<Integer, Complex[]>> zpL = new HashMap<>();
+
+				int maxK = n / 2;
+				for (int k = 0; k <= maxK; ++k) {
+
+					int l = n - 2 * k;
+					int li = l / 2;
+
+					Map<Integer, Complex[]> zpM = new HashMap<>();
+					for (int m = -l; m <= l; ++m) {
+						System.out.println("N=" + n + ", L=" + l + " (Li=" + li + "), M=" + m);
+
+						int absM = abs(m);
+
+						List<ComplexCoeff> gCoeffsNLM = ZernikeCache.getGCoefs(n, li, absM);
+
+						int nCoeffs = gCoeffsNLM.size();
+
+						Complex[] zp_xyz = new Complex[volume_size];
+						Arrays.fill(zp_xyz, new Complex(0,0));
+
+						for (int x = 0; x < dimX; ++x) {
+							point[0] = (vx - x) * scale; // TODO: figure out why x is reversed
+							double p0sq = point[0] * point[0];
+							if (p0sq > dist_threshold) {
+								continue;
+							}
+
+							for (int y = 0; y < dimY; ++y) {
+								point[1] = (y - vy) * scale;
+								double p1sq = point[1] * point[1];
+								if (p0sq + p1sq > dist_threshold) {
 									continue;
 								}
 
-								for (int m = -l; m <= l; ++m) {
+								for (int z = 0; z < dimZ; ++z) {
+									// the origin is in the middle of the grid, all voxels are
+									// projected into the unit ball
+									point[2] = (z - vz) * scale;
+
+									if (p0sq + p1sq + point[2] * point[2] > dist_threshold) {
+										continue;
+									}
+
+									// zernike polynomial evaluated at point
 									Complex zp = new Complex(0, 0);
 
-									int absM = Math.abs(m);
+									for (int i = 0; i < nCoeffs; ++i) {
 
-									List<ComplexCoeff> gCoeffsNLM = ZernikeCache.getGCoefs(n, l / 2, absM);
-									for (ComplexCoeff cc : gCoeffsNLM) {
-										Complex cvalue = cc.c;
+										ComplexCoeff cc = gCoeffsNLM.get(i);
+										double clmCoef = ZernikeCache.getClmValue(l, absM);
+										Complex cvalue = cc.c.mul(clmCoef);
 
+										// conjugate if m negative
 										if (m < 0) {
 											cvalue = cvalue.conj();
 
+											// take care of the sign
 											if (m % 2 != 0) {
-												cvalue = cvalue.mul(new Complex(-1, 0));
+												cvalue = cvalue.negate();
 											}
 										}
 
-										zp = zp.add(cvalue.mul(Math.pow(point[0], cc.p) *
-												Math.pow(point[1], cc.q) *
-												Math.pow(point[2], cc.r)));
+										zp = zp.add(cvalue.mul(pow(point[0], cc.p)).mul(pow(point[1], cc.q)).mul(pow(point[2], cc.r)));
+
 									}
-									//System.err.println("Reconstruct: n:" + n + " l:" + l + " m:" + m + " k:" + k + " nu:" + nu);
-									fVal = fVal.add(zp.mul(getMoment(n, l / 2, m)));
-								}
-							}
-						}
-					}
-					int flattenedIndex = x + ydim + z * dim0;
-					reconstructedVolume.getVoxelArray()[flattenedIndex] = fVal.getReal();
-				}
+									zp_xyz[(z * dimY + y) * dimX + x] = zp;
+									_grid[(z * dimY + y) * dimX + x] += zp.mul(zm.getMoment(n, li, m)).getReal();
+								} //z
+							} //y
+						} // x
+
+						zpM.put(m, zp_xyz);
+					} // m level
+					zpL.put(l, zpM);
+				} // l level
+				zpN.put(n, zpL);
+			} // n level
+			if (saveCache) {
+				ReconstructionCache.writeZpCache(zpN);
 			}
 		}
 
-		return reconstructedVolume;
+		Volume volume = new Volume();
+		int[] dimensions = new int[]{dimX, dimY, dimZ};
+		volume.createFromData(dimensions, _grid,0.8);
+		return volume;
 	}
-
 }
