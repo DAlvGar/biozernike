@@ -56,12 +56,12 @@ public class VolumeIO {
 		//os.writeFloat((float)volume.getCorner()[1]);
 		//os.writeFloat((float)volume.getCorner()[2]);
 		//TODO: write the actual corner
-//		os.writeInt((int)pLower.x);
-//		os.writeInt((int)pLower.y);
-//		os.writeInt((int)pLower.z);
-		os.writeInt(0);
-		os.writeInt(0);
-		os.writeInt(0);
+		os.writeInt((int)pLower.x);
+		os.writeInt((int)pLower.y);
+		os.writeInt((int)pLower.z);
+		//os.writeInt(0);
+		//os.writeInt(0);
+		//os.writeInt(0);
 
 		/* NX, NY, NZ */
 		os.writeInt(dims[0]);

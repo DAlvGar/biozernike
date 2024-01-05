@@ -70,7 +70,7 @@ public class RotationAlignment {
 				}
 			}
 
-			logger.info("Alignment centroid: {}", indRefStructure);
+			//logger.info("Alignment centroid: {}", indRefStructure);
 
 			List<MomentTransform> solution = new ArrayList<>();
 			MomentTransform rotationRef = invariantNorms.get(indRefStructure).getNormalizationSolutions(indZero, indReal).get(0);

@@ -12,7 +12,7 @@ public class ReconstructionCache {
         if (zp_arr==null) {
             System.out.println("Reading cache...");
 
-            ObjectInputStream ois = new ObjectInputStream(new FileInputStream("D:\\PT\\SRC\\biozernike\\test.coefs"));
+            ObjectInputStream ois = new ObjectInputStream(new FileInputStream("Reconstruction.coefs"));
 
             Map<Integer, Map<Integer, Map<Integer, Complex[]>>> zp_vals =
                     (Map<Integer, Map<Integer, Map<Integer, Complex[]>>>) ois.readObject();
@@ -28,7 +28,7 @@ public class ReconstructionCache {
 
 //        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream("test.coefs"));
         System.out.println("Writing cache...");
-        ObjectOutputStream oos = new  ObjectOutputStream(new FileOutputStream("D:\\PT\\SRC\\biozernike\\test.coefs"));
+        ObjectOutputStream oos = new  ObjectOutputStream(new FileOutputStream("Reconstruction.coefs"));
         oos.writeObject(zp_vals);
         oos.close();
         System.out.println("Done writing cache...");

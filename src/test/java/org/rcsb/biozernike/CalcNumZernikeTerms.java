@@ -14,7 +14,7 @@ public class CalcNumZernikeTerms {
         }
     }
 
-    private static int[] calcNumTerms(int maxOrder) {
+    public static int[] calcNumTerms(int maxOrder) {
         int count = 0;
         int countL = 0;
         int countMpositive = 0;

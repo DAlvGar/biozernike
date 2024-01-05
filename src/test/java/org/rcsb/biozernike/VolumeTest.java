@@ -19,7 +19,10 @@ import javax.vecmath.Vector3d;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -145,10 +148,32 @@ public class VolumeTest {
 		volume.create(reprPoints, resNames);
 	}
 
+	public static void writeAtomsPDB(Atom[] ligandAtoms, String outputFilePath) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(outputFilePath))) {
+            // Writing each atom's information to the PDB file
+            for (Atom atom : ligandAtoms) {
+                writer.printf("ATOM  %5d %-4s%3s %s%4d    %8.3f%8.3f%8.3f  1.00  0.00          %s%n",
+                        atom.getPDBserial(),
+                        atom.getName(),
+                        atom.getGroup().getPDBName(),
+                        atom.getGroup().getChainId(),
+                        atom.getGroup().getResidueNumber().getSeqNum(),
+                        atom.getX(),
+                        atom.getY(),
+                        atom.getZ(),
+                        atom.getElement());
+                // Modify the format based on the Atom object structure in your scenario
+            }
+            System.out.println("PDB file written successfully.");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
 	@Test
 	public void testLigand() throws Exception {
-		Structure structure1 = StructureIO.getStructure("6U9R");
-		Structure structure2 = StructureIO.getStructure("6U9N");
+		Structure structure1 = StructureIO.getStructure("src/test/resources/6U9R.pdb");
+		Structure structure2 = StructureIO.getStructure("src/test/resources/6U9N.pdb");
 		List<Chain> chains1 = structure1.getNonPolyChains();
 		List<Chain> chains2 = structure2.getNonPolyChains();
 		Atom[] ligand1 = StructureTools.getAllAtomArray(chains1.get(1));
@@ -168,8 +193,8 @@ public class VolumeTest {
 		volume1.setRadiusVarMult(2);
 		volume2.setRadiusVarMult(2);
 
-		VolumeIO.write(volume1,"D:/PT/Ligands/volume1_original.map",MapFileType.CCP4);
-		VolumeIO.write(volume2,"D:/PT/Ligands/volume2_original.map",MapFileType.CCP4);
+		VolumeIO.write(volume1,"Ligands/volume1_original.mrc",MapFileType.MRC);
+		VolumeIO.write(volume2,"Ligands/volume2_original.mrc",MapFileType.MRC);
 
 		List<InvariantNorm> zc = new ArrayList<>();
 
@@ -186,20 +211,25 @@ public class VolumeTest {
 		Calc.transform(ligand1,rot1);
 		Calc.transform(ligand2,rot2);
 
+		// Create a new Structure object for the ligand
+		writeAtomsPDB(ligand1, "Ligands/ligand1.fitted.pdb");
+		writeAtomsPDB(ligand2, "Ligands/ligand2.fitted.pdb");
+
 		Point3d[] points1_transformed = Calc.atomsToPoints(ligand1);
 		Volume volume1_transformed = new Volume();
 		volume1_transformed.create(points1_transformed,atomNames1);
-		VolumeIO.write(volume1_transformed,"D:/PT/Ligands/volume1_transformed.map",MapFileType.CCP4);
+		VolumeIO.write(volume1_transformed,"Ligands/volume1_transformed.mrc",MapFileType.MRC);
 
 		Point3d[] points2_transformed = Calc.atomsToPoints(ligand2);
 		Volume volume2_transformed = new Volume();
 		volume2_transformed.create(points2_transformed,atomNames2);
-		VolumeIO.write(volume2_transformed,"D:/PT/Ligands/volume2_transformed.map",MapFileType.CCP4);
+		VolumeIO.write(volume2_transformed,"Ligands/volume2_transformed.mrc",MapFileType.MRC);
 	}
+
 
 	@Test
 	public void testReconstruction() throws Exception {
-		Structure structure1 = StructureIO.getStructure("6U9R");
+		Structure structure1 = StructureIO.getStructure("src/test/resources/6U9R.pdb");
 		List<Chain> chains1 = structure1.getNonPolyChains();
 		Atom[] ligand1 = StructureTools.getAllAtomArray(chains1.get(1));
 
@@ -211,15 +241,15 @@ public class VolumeTest {
 
 		volume1.create(points1, atomNames1);
 
-		VolumeIO.write(volume1, "D:/PT/Ligands/orders/original.map", MapFileType.MRC);
+		VolumeIO.write(volume1, "Ligands/original.map", MapFileType.MRC);
 
 		ZernikeMoments zm = new ZernikeMoments(volume1, 15);
 //		Volume volume_rec = ZernikeMoments.reconstructVolume(zm, 32, 15, false, true);
 //		VolumeIO.write(volume_rec, "D:/PT/Ligands/volume1_rec_orig.map", MapFileType.MRC);
 
 		for (int maxN=0;maxN<=15;maxN++) {
-			Volume volume_rec2 = ZernikeMoments.reconstructVolume(zm, 32, maxN, true, false);
-			VolumeIO.write(volume_rec2, "D:/PT/Ligands/orders/"+maxN+".map", MapFileType.MRC);
+			Volume volume_rec2 = ZernikeMoments.reconstructVolume(zm, volume1.getDimensions(), volume1.getCenterVolume(), maxN, volume1.getGridWidth(), true, false);
+			VolumeIO.write(volume_rec2, "Ligands/orders/"+maxN+".map", MapFileType.MRC);
 		}
 	}
 
@@ -264,7 +294,7 @@ public class VolumeTest {
 
 		ligand_interface.createFromInterface(points, points1, atomNames, atomNames1,0.25);
 
-		VolumeIO.write(ligand_interface, "D:/PT/Ligands/6u9r_interface.map", MapFileType.CCP4);
+		VolumeIO.write(ligand_interface, "Ligands/6u9r_interface.map", MapFileType.CCP4);
 
 
 	}
@@ -319,7 +349,7 @@ public class VolumeTest {
 
 
 		ZernikeMoments ligandZm = new ZernikeMoments(ligandVolume, 15);
-		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15,ligandVolume.getGridWidth(), true, false);
 
 		VolumeIO.write(ligandVolumeRec, "D:/PT/Ligands/loading/ligand_rec.map", MapFileType.MRC);
 
@@ -347,7 +377,7 @@ public class VolumeTest {
 		ligandVolume.normalize();
 
 		ZernikeMoments ligandZm = new ZernikeMoments(ligandVolume, 15);
-		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
 		VolumeIO.write(ligandVolumeRec, "D:/PT/Ligands/orientation/ligand_original_rec.map", MapFileType.MRC);
 
 		InvariantNorm ligandNormalization = new InvariantNorm(ligandVolume, 15);
@@ -362,7 +392,7 @@ public class VolumeTest {
 //		VolumeIO.write(ligandVolume, "D:/PT/Ligands/orientation/ligand_normalized.map", MapFileType.MRC);
 
 		ligandZm = new ZernikeMoments(ligandTransform.getMoments(),true);
-		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
 
 		VolumeIO.write(ligandVolumeRec, "D:/PT/Ligands/orientation/ligand_transformed_rec.map", MapFileType.MRC);
 
@@ -376,7 +406,7 @@ public class VolumeTest {
 		InvariantNorm interfaceNormalization = new InvariantNorm(interfaceVolume, 15);
 
 		ZernikeMoments interfaceZm = new ZernikeMoments(interfaceVolume, 15);
-		Volume interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,32, 15, true, false);
+		Volume interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,interfaceVolume.getDimensions(), interfaceVolume.getCenterVolume(), 15, interfaceVolume.getGridWidth(), true, false);
 		VolumeIO.write(interfaceVolumeRec, "D:/PT/Ligands/orientation/interface_original_rec.map", MapFileType.MRC);
 
 		List<MomentTransform> interfaceTransforms = interfaceNormalization.getConstrainedNormalizationSolution(2,2, indsPositive);
@@ -389,7 +419,7 @@ public class VolumeTest {
 
 
 		interfaceZm = new ZernikeMoments(interfaceTransform.getMoments(),true);
-		interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,32, 15, true, false);
+		interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,interfaceVolume.getDimensions(), interfaceVolume.getCenterVolume(), 15, interfaceVolume.getGridWidth(),true, false);
 
 		VolumeIO.write(interfaceVolumeRec, "D:/PT/Ligands/orientation/interface_transformed_rec.map", MapFileType.MRC);
 
@@ -412,7 +442,7 @@ public class VolumeTest {
 
 
 		InvariantNorm pocketNormalization = new InvariantNorm(pocketVolume,15);
-		Volume pocketVolumeRec = ZernikeMoments.reconstructVolume(pocketNormalization.getMoments(),32, 15, true, false);
+		Volume pocketVolumeRec = ZernikeMoments.reconstructVolume(pocketNormalization.getMoments(),pocketVolume.getDimensions(), pocketVolume.getCenterVolume(), 15, pocketVolume.getGridWidth(), true, false);
 		VolumeIO.write(pocketVolumeRec, "D:\\PT\\Ligands\\Combined\\pocket_original_rec.map", MapFileType.MRC);
 
 
@@ -425,7 +455,7 @@ public class VolumeTest {
 		Matrix3d pocketRotation = pocketTransform.rotation();
 		Vector3d pocketCenter = pocketNormalization.getCenter();
 
-		pocketVolumeRec = ZernikeMoments.reconstructVolume(new ZernikeMoments(pocketTransform.getMoments(), true),32, 15, true, false);
+		pocketVolumeRec = ZernikeMoments.reconstructVolume(new ZernikeMoments(pocketTransform.getMoments(), true),pocketVolume.getDimensions(), pocketVolume.getCenterVolume(), 15, pocketVolume.getGridWidth(), true, false);
 		VolumeIO.write(pocketVolumeRec, "D:\\PT\\Ligands\\Combined\\pocket_aligned_rec.map", MapFileType.MRC);
 
 		// apply this to the ligand ,
@@ -449,13 +479,13 @@ public class VolumeTest {
 
 		// ligand radius?
 
-		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
 		VolumeIO.write(ligandVolumeRec, "D:\\PT\\Ligands\\Combined\\ligand_original_shifted_rec.map", MapFileType.MRC);
 
 		ligandVolume.updateCenter();
 		ligandZm = new ZernikeMoments(ligandVolume, 15);
 
-		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(), true, false);
 		VolumeIO.write(ligandVolumeRec, "D:\\PT\\Ligands\\Combined\\ligand_original_rec.map", MapFileType.MRC);
 
 		InvariantNorm ligandNormalization = new InvariantNorm(ligandZm);
@@ -466,7 +496,7 @@ public class VolumeTest {
 
 		ZernikeMoments ligandPocketTr = new ZernikeMoments(transform.getMoments(), true);
 
-		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandPocketTr,32, 15, true, false);
+		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandPocketTr,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
 		VolumeIO.write(ligandVolumeRec, "D:\\PT\\Ligands\\Combined\\ligand_aligned_rec.map", MapFileType.MRC);
 
 

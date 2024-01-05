@@ -44,9 +44,9 @@ public class OpenDXIOTest {
 		URL url = OpenDXIOTest.class.getResource("/mol1_HDON.dx");
 		Volume volumeDX = OpenDXIO.read(url.getPath());
 		OpenDXIO.write("reconstructed.dx", volumeDX);
-		VolumeIO.write(volumeDX, new File("convert.ccp4"), MapFileType.CCP4);
-		VolumeIO.write(volumeDX, new File("convert.mrc"), MapFileType.MRC);
-		File infile = new File("convert.mrc");
+		VolumeIO.write(volumeDX, "convert.ccp4", MapFileType.CCP4);
+		VolumeIO.write(volumeDX, "convert.mrc", MapFileType.MRC);
+		//File infile = new File("convert.mrc");
 		//Volume ccp4 = VolumeIO.read(infile, MapFileType.MRC);
 		//OpenDXIO.write("ccp4todx.dx", ccp4);
     }

@@ -151,9 +151,8 @@ public class DescriptorTest {
 		volumeEM.applyContourAndNormalize(0.0176, 757);
 		volumeEM.updateCenter();
 		volumeEM.setRadiusVarMult(1.64);
-		File of = new File("emd_updated.mrc");
 		System.err.println(String.format("Center: %.3f %.3f %.3f ", volumeEM.getCenterReal()[0], volumeEM.getCenterReal()[1], volumeEM.getCenterReal()[2]));
-		VolumeIO.write(volumeEM, of, MapFileType.MRC);
+		VolumeIO.write(volumeEM, "emd_updated.mrc", MapFileType.MRC);
 		OpenDXIO.write("emd_update.dx", volumeEM);
 
 		InvariantNorm normalizationEM = new InvariantNorm(volumeEM,6);
@@ -165,8 +164,7 @@ public class DescriptorTest {
 		Point3d[] reprPoints = Calc.atomsToPoints(reprAtoms);
 		String[] resNames = Arrays.stream(reprAtoms).map(a -> a.getGroup().getPDBName()).toArray(String[]::new);
 		volumeStructure.create(reprPoints, resNames);
-		File osf = new File("1hss_vol.mrc");
-		VolumeIO.write(volumeStructure, osf, MapFileType.MRC);
+		VolumeIO.write(volumeStructure, "1hss_vol.mrc", MapFileType.MRC);
 		OpenDXIO.write("1hss_vol.dx", volumeStructure);
 
 		InvariantNorm normalizationStructure = new InvariantNorm(volumeStructure, 6);

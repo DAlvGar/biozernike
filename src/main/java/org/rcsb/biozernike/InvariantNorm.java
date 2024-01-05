@@ -532,9 +532,4 @@ public class InvariantNorm {
 		return moments;
 	}
 
-	public Volume reconstruct(int minN, int maxN, int minL, int maxL) {
-		return moments.reconstructVolume(minN, maxN, minL, maxL);
-	}
-
-
 }

@@ -232,21 +232,21 @@ public class ZernikeMoments {
 	}
 
 
-	public static Volume reconstructVolume(ZernikeMoments zm, int dim, int _maxN, boolean useCache, boolean saveCache) throws Exception {
-		int dimX = dim;
-		int dimY = dim;
-		int dimZ = dim;
+	public static Volume reconstructVolume(ZernikeMoments zm, int[] dimensions, double[] center, int _maxN, double gridWidth, boolean useCache, boolean saveCache) throws Exception {
+		int dimX = dimensions[0];
+		int dimY = dimensions[1];
+		int dimZ = dimensions[2];
 		int volume_size = dimX*dimY*dimZ;
-		double center = dim/2.0;
+		//double center = dim/2.0;
 		//scaling
-		double scale = 2.0/dim;
+		double scale = 1.6/pow(volume_size, 1/3.);
 
 		boolean cache_available = false;
 
 		//translation
-		double vx = center;
-		double vy = center;
-		double vz = center;
+		double vx = center[0];
+		double vy = center[1];
+		double vz = center[2];
 
 		double[] point = new double[3];
 
@@ -284,7 +284,7 @@ public class ZernikeMoments {
 
 					Map<Integer, Complex[]> zpM = new HashMap<>();
 					for (int m = -l; m <= l; ++m) {
-						System.out.println("N=" + n + ", L=" + l + " (Li=" + li + "), M=" + m);
+						// System.out.println("N=" + n + ", L=" + l + " (Li=" + li + "), M=" + m);
 
 						int absM = abs(m);
 
@@ -358,8 +358,8 @@ public class ZernikeMoments {
 		}
 
 		Volume volume = new Volume();
-		int[] dimensions = new int[]{dimX, dimY, dimZ};
-		volume.createFromData(dimensions, _grid,0.8);
+		//int[] dimensions = new int[]{dimX, dimY, dimZ};
+		volume.createFromData(dimensions, _grid, gridWidth);
 		return volume;
 	}
 }
