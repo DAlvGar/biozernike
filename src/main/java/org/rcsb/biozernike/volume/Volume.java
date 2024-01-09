@@ -262,6 +262,11 @@ public class Volume {
 			reset();
 		} else {
 			updateCenter();
+			double[] corner = {0,0,0};
+			bb.getLower(pLower);
+			pLower.get(corner);
+			System.out.println(pLower);
+			setCorner(corner);
 		}
 	}
 

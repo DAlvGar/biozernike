@@ -100,10 +100,15 @@ public class Complex implements Serializable {
 		return new Complex(r*Math.cos(theta),r*Math.sin(theta));
 	}
 
+	// @Override
+	// public String toString() {
+	// 	return real+", "+imaginary;
+	// }
+
 	@Override
-	public String toString() {
-		return real+", "+imaginary;
-	}
+    public String toString() {
+        return "(" + real + " + " + imaginary + "i)";
+    }
 
 	@Override
 	public boolean equals(Object o) {

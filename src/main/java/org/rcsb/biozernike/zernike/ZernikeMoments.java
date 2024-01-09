@@ -1,5 +1,6 @@
 package org.rcsb.biozernike.zernike;
 
+import org.rcsb.biozernike.InvariantNorm;
 import org.rcsb.biozernike.complex.Complex;
 import org.rcsb.biozernike.volume.Volume;
 import org.slf4j.Logger;
@@ -11,6 +12,8 @@ import java.util.stream.IntStream;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.pow;
+
+import java.io.IOException;
 
 /**
  * Class to hold the 3D Zernike moments of a given volume.
@@ -88,7 +91,8 @@ public class ZernikeMoments {
 					zm = zm.mul(3.0 / (4.0 * Math.PI));
 					zmMLevelUnscaled.add(zm);
 					zmMLevelScaled.add(zm.mul(ZernikeCache.getClmValue(l, m)));
-					//System.err.println("Compute moments: n:" + n + " l:" + l + " m:" + m + " l0:" + l0 + " li:" + li);
+					// System.err.println("Compute moments: n:" + n + " l:" + l + " m:" + m + " l0:"
+					// + l0 + " li:" + li);
 				}
 				zmLLevelUnscaled.add(zmMLevelUnscaled);
 				zmLLevelScaled.add(zmMLevelScaled);
@@ -231,19 +235,42 @@ public class ZernikeMoments {
 		return unFlattenMomentsComplex(flatMomentsComplex, maxOrder);
 	}
 
+	/*
+	 * Reconstruct volume from zernike moments taking the original volume
+	 * information
+	 */
+	public static Volume reconstVolumeLike(ZernikeMoments zm, Volume originalVolume, int _maxN, double scale_factor,
+			boolean useCache, boolean saveCache) throws Exception {
+		Volume volume_rec2 = reconstructVolume(zm, originalVolume.getDimensions(),
+				originalVolume.getCenterVolume(), _maxN, originalVolume.getGridWidth(), scale_factor, false, false);
+		volume_rec2.setCorner(originalVolume.getCorner());
+		volume_rec2.setCenterReal(originalVolume.getCenterReal());
+		return volume_rec2;
+	}
 
-	public static Volume reconstructVolume(ZernikeMoments zm, int[] dimensions, double[] center, int _maxN, double gridWidth, boolean useCache, boolean saveCache) throws Exception {
+	public static Volume reconstructVolume(ZernikeMoments zm, int[] dimensions, double[] center, int _maxN,
+			double gridWidth, boolean useCache, boolean saveCache) throws Exception {
+		return reconstructVolume(zm, dimensions, center, _maxN, gridWidth, 1.6, false, false);
+	}
+
+	public static Volume reconstructVolume(ZernikeMoments zm, int dim, int _maxN, boolean useCache, boolean saveCache)
+			throws Exception {
+		int[] dimensions = { dim, dim, dim };
+		double[] center = { dim / 2.0, dim / 2.0, dim / 2.0 };
+		return reconstructVolume(zm, dimensions, center, _maxN, 0.8, 2., useCache, saveCache);
+	}
+
+	public static Volume reconstructVolume(ZernikeMoments zm, int[] dimensions, double[] center, int _maxN,
+			double gridWidth, double scale_factor, boolean useCache, boolean saveCache) throws Exception {
 		int dimX = dimensions[0];
 		int dimY = dimensions[1];
 		int dimZ = dimensions[2];
-		int volume_size = dimX*dimY*dimZ;
-		//double center = dim/2.0;
-		//scaling
-		double scale = 1.6/pow(volume_size, 1/3.);
+		int volume_size = dimX * dimY * dimZ;
+		// double center = dim/2.0;
+		// scaling
+		double scale = scale_factor / pow(volume_size, 1 / 3.);
 
-		boolean cache_available = false;
-
-		//translation
+		// translation
 		double vx = center[0];
 		double vy = center[1];
 		double vz = center[2];
@@ -251,11 +278,11 @@ public class ZernikeMoments {
 		double[] point = new double[3];
 
 		double dist_threshold = 1;
-		double[] _grid = new double[dimX*dimY*dimZ];
+		double[] _grid = new double[dimX * dimY * dimZ];
 
-		if (useCache) {
-			Map<Integer, Map<Integer, Map<Integer, Complex[]>>> zpN = ReconstructionCache.readZpCache();
-			for (int n=0; n<=_maxN; ++n) {
+		if (useCache && ReconstructionCache.cacheExists(dimX)) {
+			Map<Integer, Map<Integer, Map<Integer, Complex[]>>> zpN = ReconstructionCache.readZpCache(dimX);
+			for (int n = 0; n <= _maxN; ++n) {
 				int maxK = n / 2;
 				for (int k = 0; k <= maxK; ++k) {
 					int l = n - 2 * k;
@@ -293,7 +320,7 @@ public class ZernikeMoments {
 						int nCoeffs = gCoeffsNLM.size();
 
 						Complex[] zp_xyz = new Complex[volume_size];
-						Arrays.fill(zp_xyz, new Complex(0,0));
+						Arrays.fill(zp_xyz, new Complex(0, 0));
 
 						for (int x = 0; x < dimX; ++x) {
 							point[0] = (vx - x) * scale; // TODO: figure out why x is reversed
@@ -337,13 +364,14 @@ public class ZernikeMoments {
 											}
 										}
 
-										zp = zp.add(cvalue.mul(pow(point[0], cc.p)).mul(pow(point[1], cc.q)).mul(pow(point[2], cc.r)));
+										zp = zp.add(cvalue.mul(pow(point[0], cc.p)).mul(pow(point[1], cc.q))
+												.mul(pow(point[2], cc.r)));
 
 									}
 									zp_xyz[(z * dimY + y) * dimX + x] = zp;
 									_grid[(z * dimY + y) * dimX + x] += zp.mul(zm.getMoment(n, li, m)).getReal();
-								} //z
-							} //y
+								} // z
+							} // y
 						} // x
 
 						zpM.put(m, zp_xyz);
@@ -353,13 +381,27 @@ public class ZernikeMoments {
 				zpN.put(n, zpL);
 			} // n level
 			if (saveCache) {
-				ReconstructionCache.writeZpCache(zpN);
+				ReconstructionCache.writeZpCache(zpN, dimX);
 			}
 		}
 
 		Volume volume = new Volume();
-		//int[] dimensions = new int[]{dimX, dimY, dimZ};
+		// int[] dimensions = new int[]{dimX, dimY, dimZ};
 		volume.createFromData(dimensions, _grid, gridWidth);
 		return volume;
 	}
+
+	public static ZernikeMoments read(String filePath, int maxOrder, boolean binary) throws ClassNotFoundException {
+		/* Reconstruct InvariantNorm from */
+		List<Complex> momentsFlat = ZernikeMomentsIO.readComplex(filePath, binary);
+		List<List<List<Complex>>> unflatmoments = ZernikeMoments.unFlattenMomentsComplex(momentsFlat, maxOrder);
+		ZernikeMoments zm = new ZernikeMoments(unflatmoments, true);
+		return zm;
+	}
+
+	public void write(String outFile, boolean binary) throws IOException {
+		List<Complex> cflat = flattenMomentsComplex(getOriginalMoments());
+		ZernikeMomentsIO.writeComplex(outFile, cflat, binary);
+	}
+
 }

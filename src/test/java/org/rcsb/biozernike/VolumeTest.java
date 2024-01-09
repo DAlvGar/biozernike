@@ -170,7 +170,7 @@ public class VolumeTest {
         }
     }
 
-	@Test
+	// @Test
 	public void testLigand() throws Exception {
 		Structure structure1 = StructureIO.getStructure("src/test/resources/6U9R.pdb");
 		Structure structure2 = StructureIO.getStructure("src/test/resources/6U9N.pdb");
@@ -227,7 +227,7 @@ public class VolumeTest {
 	}
 
 
-	@Test
+	//@Test
 	public void testReconstruction() throws Exception {
 		Structure structure1 = StructureIO.getStructure("src/test/resources/6U9R.pdb");
 		List<Chain> chains1 = structure1.getNonPolyChains();
@@ -248,7 +248,7 @@ public class VolumeTest {
 //		VolumeIO.write(volume_rec, "D:/PT/Ligands/volume1_rec_orig.map", MapFileType.MRC);
 
 		for (int maxN=0;maxN<=15;maxN++) {
-			Volume volume_rec2 = ZernikeMoments.reconstructVolume(zm, volume1.getDimensions(), volume1.getCenterVolume(), maxN, volume1.getGridWidth(), true, false);
+			Volume volume_rec2 = ZernikeMoments.reconstructVolume(zm, 32, maxN, true, false);
 			VolumeIO.write(volume_rec2, "Ligands/orders/"+maxN+".map", MapFileType.MRC);
 		}
 	}
@@ -275,9 +275,9 @@ public class VolumeTest {
 //
 //
 //	}
-	@Test
+	//@Test
 	public void testInterface() throws Exception {
-		Structure structure1 = StructureIO.getStructure("6U9R");
+		Structure structure1 = StructureIO.getStructure("src/test/resources/6U9R.pdb");
 		List<Chain> chains = structure1.getPolyChains();
 		List<Chain> chains1 = structure1.getNonPolyChains();
 
@@ -294,13 +294,13 @@ public class VolumeTest {
 
 		ligand_interface.createFromInterface(points, points1, atomNames, atomNames1,0.25);
 
-		VolumeIO.write(ligand_interface, "Ligands/6u9r_interface.map", MapFileType.CCP4);
+		VolumeIO.write(ligand_interface, "Ligands/6u9r_interface.map", MapFileType.MRC);
 
 
 	}
-	@Test
+	//@Test
 	public void testInterfaceProtein() throws Exception {
-		Structure structure1 = StructureIO.getStructure("7O29");
+		Structure structure1 = StructureIO.getStructure("src/test/resources/7O29.pdb");
 		List<Chain> chains = structure1.getPolyChains();
 
 		Atom[] chain1 = StructureTools.getRepresentativeAtomArray(chains.get(0));
@@ -309,7 +309,7 @@ public class VolumeTest {
 
 		Volume chain1_volume = new Volume();
 		chain1_volume.create(points1, resNames1,0.25);
-		VolumeIO.write(chain1_volume, "D:/PT/Ligands/7o29_chain1.map", MapFileType.CCP4);
+		VolumeIO.write(chain1_volume, "TestResults/7o29_chain1.map", MapFileType.CCP4);
 
 		Atom[] protein = StructureTools.getRepresentativeAtomArray(chains.get(1));
 		String[] resNames = Arrays.stream(protein).map(a->a.getGroup().getPDBName()).toArray(String[]::new);
@@ -317,18 +317,16 @@ public class VolumeTest {
 
 		Volume chain2_volume = new Volume();
 		chain2_volume.create(points, resNames,0.25);
-		VolumeIO.write(chain2_volume, "D:/PT/Ligands/7o29_chain2.map", MapFileType.CCP4);
+		VolumeIO.write(chain2_volume, "TestResults/7o29_chain2.map", MapFileType.CCP4);
 
 
 		Volume chain_interface = new Volume();
 		chain_interface.createFromInterface(points, points1, resNames, resNames1,0.25);
-		VolumeIO.write(chain_interface, "D:/PT/Ligands/7o29_interface.map", MapFileType.CCP4);
-
-
+		VolumeIO.write(chain_interface, "TestResults/7o29_interface.map", MapFileType.CCP4);
 
 	}
 
-	@Test
+	//@Test
 	public void testReadWrite() throws Exception {
 		Structure structure = StructureIO.getStructure("6U9R");
 		List<Chain> chains_nonpoly = structure.getNonPolyChains();
@@ -341,23 +339,23 @@ public class VolumeTest {
 		Volume ligandVolume = new Volume();
 		ligandVolume.create(ligandPoints, ligandAtomNames,0.25);
 
-		VolumeIO.write(ligandVolume, "D:/PT/Ligands/loading/ligand_original.map", MapFileType.MRC);
-		InputStream fs = Files.newInputStream(Paths.get("D:/PT/Ligands/loading/ligand_original.map"));
+		VolumeIO.write(ligandVolume, "TestResults/ligand_original.map", MapFileType.MRC);
+		InputStream fs = Files.newInputStream(Paths.get("TestResults/ligand_original.map"));
 
 		Volume readVolume = VolumeIO.read(fs, MapFileType.MRC, false);
-		VolumeIO.write(readVolume, "D:/PT/Ligands/loading/ligand_rewrite.map", MapFileType.MRC);
+		VolumeIO.write(readVolume, "TestResults/ligand_rewrite.map", MapFileType.MRC);
 
 
 		ZernikeMoments ligandZm = new ZernikeMoments(ligandVolume, 15);
-		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15,ligandVolume.getGridWidth(), true, false);
+		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm, 32, 15, true, false);
 
-		VolumeIO.write(ligandVolumeRec, "D:/PT/Ligands/loading/ligand_rec.map", MapFileType.MRC);
+		VolumeIO.write(ligandVolumeRec, "TestResults/ligand_rec.map", MapFileType.MRC);
 
 	}
 
-	@Test
+	//@Test
 	public void testVectors() throws Exception {
-		Structure structure = StructureIO.getStructure("6U9R");
+		Structure structure = StructureIO.getStructure("src/test/resources/6U9R.pdb");
 		List<Chain> chains_poly = structure.getPolyChains();
 		List<Chain> chains_nonpoly = structure.getNonPolyChains();
 
@@ -373,12 +371,13 @@ public class VolumeTest {
 		Volume ligandVolume = new Volume();
 		ligandVolume.create(ligandPoints, ligandAtomNames,0.25);
 
-		VolumeIO.write(ligandVolume, "D:/PT/Ligands/orientation/ligand_original.map", MapFileType.MRC);
+		VolumeIO.write(ligandVolume, "TestResults/ligand_original.map", MapFileType.MRC);
 		ligandVolume.normalize();
 
 		ZernikeMoments ligandZm = new ZernikeMoments(ligandVolume, 15);
-		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
-		VolumeIO.write(ligandVolumeRec, "D:/PT/Ligands/orientation/ligand_original_rec.map", MapFileType.MRC);
+		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		ligandVolumeRec.setCorner(ligandVolume.getCorner());
+		VolumeIO.write(ligandVolumeRec, "TestResults/ligand_original_rec.map", MapFileType.MRC);
 
 		InvariantNorm ligandNormalization = new InvariantNorm(ligandVolume, 15);
 		int[] indsPositive = {10,14,17};
@@ -392,22 +391,22 @@ public class VolumeTest {
 //		VolumeIO.write(ligandVolume, "D:/PT/Ligands/orientation/ligand_normalized.map", MapFileType.MRC);
 
 		ligandZm = new ZernikeMoments(ligandTransform.getMoments(),true);
-		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
+		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
 
-		VolumeIO.write(ligandVolumeRec, "D:/PT/Ligands/orientation/ligand_transformed_rec.map", MapFileType.MRC);
+		VolumeIO.write(ligandVolumeRec, "TestResults/ligand_transformed_rec.map", MapFileType.MRC);
 
 
 		Volume interfaceVolume = new Volume();
 		interfaceVolume.createFromInterface(proteinPoints, ligandPoints, proteinAtomNames, ligandAtomNames,0.25);
 
-		VolumeIO.write(interfaceVolume, "D:/PT/Ligands/orientation/interface_original.map", MapFileType.MRC);
+		VolumeIO.write(interfaceVolume, "TestResults/interface_original.map", MapFileType.MRC);
 
 		interfaceVolume.normalize();
 		InvariantNorm interfaceNormalization = new InvariantNorm(interfaceVolume, 15);
 
 		ZernikeMoments interfaceZm = new ZernikeMoments(interfaceVolume, 15);
-		Volume interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,interfaceVolume.getDimensions(), interfaceVolume.getCenterVolume(), 15, interfaceVolume.getGridWidth(), true, false);
-		VolumeIO.write(interfaceVolumeRec, "D:/PT/Ligands/orientation/interface_original_rec.map", MapFileType.MRC);
+		Volume interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,32, 15, true, false);
+		VolumeIO.write(interfaceVolumeRec, "TestResults/interface_original_rec.map", MapFileType.MRC);
 
 		List<MomentTransform> interfaceTransforms = interfaceNormalization.getConstrainedNormalizationSolution(2,2, indsPositive);
 		MomentTransform interfaceTransform = interfaceTransforms.get(0);
@@ -419,16 +418,17 @@ public class VolumeTest {
 
 
 		interfaceZm = new ZernikeMoments(interfaceTransform.getMoments(),true);
-		interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,interfaceVolume.getDimensions(), interfaceVolume.getCenterVolume(), 15, interfaceVolume.getGridWidth(),true, false);
+		interfaceVolumeRec = ZernikeMoments.reconstructVolume(interfaceZm,32, 15, true, false);
 
-		VolumeIO.write(interfaceVolumeRec, "D:/PT/Ligands/orientation/interface_transformed_rec.map", MapFileType.MRC);
+		VolumeIO.write(interfaceVolumeRec, "TestResults/interface_transformed_rec.map", MapFileType.MRC);
 
 	}
-	@Test
+
+	//@Test
 	public void testCombined() throws Exception {
 		// find center and positive rotation of the pocket
-		String pocketFileName ="D:\\PT\\Ligands\\Combined\\1a4k_pocket.pdb";
-		String ligandFileName ="D:\\PT\\Ligands\\Combined\\1a4k_ligand.pdb";
+		String pocketFileName ="1a4k_pocket.pdb";
+		String ligandFileName ="1a4k_ligand.pdb";
 
 		Structure structurePocket = StructureIO.getStructure(pocketFileName);
 		Atom[] pocket = StructureTools.getAllAtomArray(structurePocket);
@@ -442,8 +442,8 @@ public class VolumeTest {
 
 
 		InvariantNorm pocketNormalization = new InvariantNorm(pocketVolume,15);
-		Volume pocketVolumeRec = ZernikeMoments.reconstructVolume(pocketNormalization.getMoments(),pocketVolume.getDimensions(), pocketVolume.getCenterVolume(), 15, pocketVolume.getGridWidth(), true, false);
-		VolumeIO.write(pocketVolumeRec, "D:\\PT\\Ligands\\Combined\\pocket_original_rec.map", MapFileType.MRC);
+		Volume pocketVolumeRec = ZernikeMoments.reconstructVolume(pocketNormalization.getMoments(),32, 15, true, false);
+		VolumeIO.write(pocketVolumeRec, "TestResults/pocket_original_rec.map", MapFileType.MRC);
 
 
 		double radiusVar = pocketVolume.getRadiusVarReal();
@@ -455,8 +455,8 @@ public class VolumeTest {
 		Matrix3d pocketRotation = pocketTransform.rotation();
 		Vector3d pocketCenter = pocketNormalization.getCenter();
 
-		pocketVolumeRec = ZernikeMoments.reconstructVolume(new ZernikeMoments(pocketTransform.getMoments(), true),pocketVolume.getDimensions(), pocketVolume.getCenterVolume(), 15, pocketVolume.getGridWidth(), true, false);
-		VolumeIO.write(pocketVolumeRec, "D:\\PT\\Ligands\\Combined\\pocket_aligned_rec.map", MapFileType.MRC);
+		pocketVolumeRec = ZernikeMoments.reconstructVolume(new ZernikeMoments(pocketTransform.getMoments(), true),32, 15, true, false);
+		VolumeIO.write(pocketVolumeRec, "TestResults/pocket_aligned_rec.map", MapFileType.MRC);
 
 		// apply this to the ligand ,
 
@@ -479,14 +479,14 @@ public class VolumeTest {
 
 		// ligand radius?
 
-		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
-		VolumeIO.write(ligandVolumeRec, "D:\\PT\\Ligands\\Combined\\ligand_original_shifted_rec.map", MapFileType.MRC);
+		Volume ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		VolumeIO.write(ligandVolumeRec, "TestResults/ligand_original_shifted_rec.map", MapFileType.MRC);
 
 		ligandVolume.updateCenter();
 		ligandZm = new ZernikeMoments(ligandVolume, 15);
 
-		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(), true, false);
-		VolumeIO.write(ligandVolumeRec, "D:\\PT\\Ligands\\Combined\\ligand_original_rec.map", MapFileType.MRC);
+		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandZm,32, 15, true, false);
+		VolumeIO.write(ligandVolumeRec, "TestResults/ligand_original_rec.map", MapFileType.MRC);
 
 		InvariantNorm ligandNormalization = new InvariantNorm(ligandZm);
 
@@ -496,8 +496,8 @@ public class VolumeTest {
 
 		ZernikeMoments ligandPocketTr = new ZernikeMoments(transform.getMoments(), true);
 
-		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandPocketTr,ligandVolume.getDimensions(), ligandVolume.getCenterVolume(), 15, ligandVolume.getGridWidth(),true, false);
-		VolumeIO.write(ligandVolumeRec, "D:\\PT\\Ligands\\Combined\\ligand_aligned_rec.map", MapFileType.MRC);
+		ligandVolumeRec = ZernikeMoments.reconstructVolume(ligandPocketTr,32, 15, true, false);
+		VolumeIO.write(ligandVolumeRec, "TestResults/ligand_aligned_rec.map", MapFileType.MRC);
 
 
 

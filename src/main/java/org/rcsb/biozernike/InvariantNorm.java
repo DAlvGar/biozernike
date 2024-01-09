@@ -6,11 +6,14 @@ import org.rcsb.biozernike.volume.Volume;
 import org.rcsb.biozernike.zernike.BinomialCache;
 import org.rcsb.biozernike.zernike.ZernikeCache;
 import org.rcsb.biozernike.zernike.ZernikeMoments;
+import org.rcsb.biozernike.zernike.ZernikeMomentsIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.vecmath.Matrix4d;
 import javax.vecmath.Vector3d;
+
+import java.io.IOException;
 import java.util.*;
 
 public class InvariantNorm {
@@ -514,8 +517,8 @@ public class InvariantNorm {
 		AlignmentResult alignmentResult = RotationAlignment.alignMultiple(zc);
 
 		List<Matrix4d> matrices = alignmentResult.getTransforms();
-		matrices.get(0).invert();
-		matrices.get(1).mul(matrices.get(0));
+		matrices.get(1).invert();
+		matrices.get(0).mul(matrices.get(1));
 
 		return alignmentResult;
 	}
