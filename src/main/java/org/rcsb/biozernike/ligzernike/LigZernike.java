@@ -77,6 +77,8 @@ public class LigZernike {
             @Option(names = { "-i" }, required = true, description = "Input Volume in DX format") String volumePath,
             @Option(names = {
                     "-o" }, required = true, description = "Destination file for full set of complex coefficients") String dest,
+            @Option(names = {
+                    "-f" }, description = "OPTIONAL Destination file for invariant coefficients") String fpdest,
             @Option(names = { "-N" }, required = true, description = "Zernike order (0 to 20)") int order,
             @Option(names = {
                     "--minCap" }, defaultValue = "0.0", description = "Volume preprocessing option: Discard values below this cutoff after flipping negatives to positives. Default 0.0.") double minCap,
@@ -100,7 +102,11 @@ public class LigZernike {
         InvariantNorm n = new InvariantNorm(v, order);
         n.getMoments().write(dest, false);
         System.out.println("Projecting volume file: " + volumePath + " and saving moments to: " + dest);
-        // Add your copy file code here
+
+        if (fpdest != null) {
+            List<Double> fp = n.getFingerprint();
+            ZernikeMomentsIO.writeDouble(fpdest, fp);
+        }
     }
 
     @Command(name = "reconstruct", description = "Reconstruct volume from 3D Zernike moments file")
@@ -143,7 +149,7 @@ public class LigZernike {
             reconstructVolume.setCorner(origin_d);
         }
         OpenDXIO.write(dest, reconstructVolume);
-        System.out.println("Volume reconstructed" + dest);
+        System.out.println("Volume reconstructed " + dest);
     }
 
     @Command(name = "fp", description = "Print Invariant Fingerprint from full set of coefficients")
