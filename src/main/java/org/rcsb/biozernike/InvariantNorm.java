@@ -6,14 +6,12 @@ import org.rcsb.biozernike.volume.Volume;
 import org.rcsb.biozernike.zernike.BinomialCache;
 import org.rcsb.biozernike.zernike.ZernikeCache;
 import org.rcsb.biozernike.zernike.ZernikeMoments;
-import org.rcsb.biozernike.zernike.ZernikeMomentsIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.vecmath.Matrix4d;
 import javax.vecmath.Vector3d;
 
-import java.io.IOException;
 import java.util.*;
 
 public class InvariantNorm {

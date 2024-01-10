@@ -107,7 +107,9 @@ public class Complex implements Serializable {
 
 	@Override
     public String toString() {
-        return "(" + real + " + " + imaginary + "i)";
+		// Format as numpy compatible complex string
+		String symbol = (imaginary < 0) ? "" : "+"; // negative already provides the sign
+        return real + symbol + imaginary + "j";
     }
 
 	@Override

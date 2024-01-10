@@ -48,7 +48,7 @@ public class LigZernikeTest {
         return v1;
     }
 
-    // @Test
+    //@Test
     public void testMomentsWrite() throws Exception {
         String outPrefix = "test_norms";
         Volume vol1 = loadMoleculeVolume("mol1_HDON.dx");
@@ -57,7 +57,17 @@ public class LigZernikeTest {
         n.getMoments().write(outPrefix + "_complex.txt", false);
     }
 
-    // @Test
+    @Test
+    public void play() {
+        String pattern = "";
+        String s = "99_CHEMBL215947-act.9_hydroele.dx";
+        System.out.println(s.contains(pattern));
+        
+        String re = "[(hydroele)|(cav)]";
+        System.out.println(s.contains(re));
+    }
+
+    //@Test
     public void testMomentsRead() throws Exception {
         /*
          * object 1 class gridpositions counts 45 49 45
@@ -76,8 +86,7 @@ public class LigZernikeTest {
         double gridWidth = 1;
         double scale_factor = 2.;
         ZernikeMoments m = ZernikeMoments.read("test_norms_complex.txt", 15, false);
-        Volume reconstructVolume = ZernikeMoments.reconstructVolume(m, dimensions, center, _maxN, gridWidth,
-                scale_factor, false, false);
+        Volume reconstructVolume = ZernikeMoments.reconstructVolume(m, 32, 15, true, true);
         reconstructVolume.setCorner(origin);
         OpenDXIO.write("reconstruct_mol1_HDON_fromfile.dx", reconstructVolume);
     }
