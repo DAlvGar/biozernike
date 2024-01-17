@@ -7,26 +7,27 @@ import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.vecmath.Matrix4d;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.io.FileUtils;
 
 import org.rcsb.biozernike.AlignmentResult;
 import org.rcsb.biozernike.InvariantNorm;
 import org.rcsb.biozernike.complex.Complex;
+import org.rcsb.biozernike.molecules.SDFReader;
 import org.rcsb.biozernike.volume.OpenDXIO;
 import org.rcsb.biozernike.volume.Volume;
 import org.rcsb.biozernike.zernike.ZernikeMoments;
 import org.rcsb.biozernike.zernike.ZernikeMomentsIO;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.biojava.nbio.structure.*;
 import org.biojava.nbio.structure.io.PDBFileReader;
+import org.openscience.cdk.interfaces.IAtomContainer;
+import org.openscience.cdk.io.iterator.IteratingSDFReader;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -44,13 +45,7 @@ public class LigZernike {
             double multiplier)
             throws Exception {
         Volume v1 = OpenDXIO.read(filename);
-        if (flip)
-            v1.flipValues(); // Turn negative to positive and viceversa
-        v1.capMax(maxCap); // throw away positive values, cap to zero and keep negatives
-        v1.capMin(minCap);
-        if (normalize)
-            v1.applyContourAndNormalize(minCap, multiplier); // Eliminate values below 0.2 and normalize
-        v1.updateCenter();
+        prepareVolume(v1, minCap, maxCap, flip, normalize, multiplier);
         return v1;
     }
 
@@ -77,6 +72,110 @@ public class LigZernike {
         PDBFileReader pdbreader = new PDBFileReader();
         Structure structure = pdbreader.getStructure(filename);
         return structure;
+    }
+
+    @Command(name = "process_sdf", description = "Generates projections of molecules in sdf file(s) with hydrophobic values precomputed to moments and fingerprints inserted into rocksdbs.")
+    public void process_sdf(@Parameters(description = "SDF input") String sdfFile,
+            @Option(names = {
+                    "--folder" }, description = "Flag if input is a folder, will read all SDF files inside if that's the case. Default: FALSE (treat single file)") boolean isFolder,
+            @Option(names = {
+                    "--momentsdb" }, defaultValue = "moments.db", description = "RocksDB to store moments") String momentsDBPath,
+            @Option(names = {
+                    "--fpdb" }, defaultValue = "fp.db", description = "RocksDB to store invariant fingerprint") String fpDBPath,
+            @Option(names = {
+                    "-N" }, required = true, description = "Zernike order (0 to 20)") int order)
+            throws IOException {
+
+        RocksDBInterface momentsDB = new RocksDBInterface(momentsDBPath);
+        RocksDBInterface FPDB = new RocksDBInterface(fpDBPath);
+        // Process hydroele and cav
+        if (isFolder) {
+            List<String> result;
+            try (Stream<Path> walk = Files.walk(Paths.get(sdfFile))) {
+                result = walk
+                        .filter(p -> !Files.isDirectory(p)) // not a directory
+                        .map(p -> p.toString()) // convert path to string
+                        .filter(f -> f.endsWith("sdf")) // check end with
+                        .collect(Collectors.toList()); // collect all matched to a List
+            };
+            if (result != null) {
+                for (String sdf: result){
+                    process_sdf_(sdf, momentsDB, FPDB, order);
+                }
+                System.out.println("DONE PROCESSING SDF FOLDER " + sdfFile);
+            } else {
+                System.out.println("NOTHING DONE ON " + sdfFile);
+            }
+
+        } else {
+            process_sdf_(sdfFile, momentsDB, FPDB, order); 
+            System.out.println("DONE PROCESSING SDF FILE " + sdfFile);
+        }
+        momentsDB.close();
+        FPDB.close();
+    }
+
+    private static void prepareVolume(Volume v1, double minCap, double maxCap, boolean flip, boolean normalize,
+            double multiplier) {
+        if (flip)
+            v1.flipValues(); // Turn negative to positive and viceversa
+        v1.capMax(maxCap); // throw away positive values, cap to zero and keep negatives
+        v1.capMin(minCap);
+        if (normalize)
+            v1.applyContourAndNormalize(minCap, multiplier); // Eliminate values below 0.2 and normalize
+        v1.updateCenter();
+    }
+
+    private static void calMomentsAndStore(String key, Volume volume, int order, RocksDBInterface momentsDB,
+            RocksDBInterface FPDB) {
+        InvariantNorm n = new InvariantNorm(volume, order);
+        List<Double> fp = n.getFingerprint();
+        List<Complex> moments = ZernikeMoments
+                .flattenMomentsComplex(n.getMoments().getOriginalMoments());
+        momentsDB.putMoments(key, moments);
+        FPDB.putFP(key, fp);
+    }
+
+    public static void process_sdf_(String sdfPath, RocksDBInterface momentsDB, RocksDBInterface FPDB, int order) {
+        HashMap<String, Integer> maps = new HashMap<String, Integer>();
+        // maps.put("hydrototal", 1);
+        maps.put("hydroele", 2);
+        maps.put("hydrocav", 3);
+        // maps.put("hydrovdw", 4);
+        maps.put("hbond_Donors", 5);
+        maps.put("hbond_Acceptors", 6);
+
+        try (IteratingSDFReader reader = SDFReader.read(sdfPath)) {
+            IAtomContainer molecule;
+            while (reader.hasNext()) {
+                molecule = reader.next();
+                // Process coordinates of atoms in the molecule
+                for (String m : maps.keySet()) {
+                    Volume volume = FieldCalculator.projectField(molecule, maps.get(m));
+                    String key = molecule.getTitle() + "_" + m;
+                    if (m.contains("hydroele")) {
+                        Volume pos = new Volume(volume); // Copy
+                        // NEGATIVE PART
+                        prepareVolume(volume, 0, 20, true, true, 1.0);
+                        prepareVolume(pos, 0, 20, false, true, 1.0);
+                        calMomentsAndStore(key, volume, order, momentsDB, FPDB);
+                        calMomentsAndStore(key + "_pos", pos, order, momentsDB, FPDB);
+                    } else if (m.contains("hydro")) {
+                        prepareVolume(volume, 0, 20, true, true, 1.0);
+                        calMomentsAndStore(key, volume, order, momentsDB, FPDB);
+                    } else {
+                        // hbond maps
+                        prepareVolume(volume, 0, 100, false, false, 10);
+                        calMomentsAndStore(key, volume, order, momentsDB, FPDB);
+                    }
+                }
+            }
+            // Close the SDF reader
+            reader.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Command(name = "process_pharmscreen_POS", description = "Temporal routine to process again hydroele maps and only store the positive part.")
@@ -235,8 +334,8 @@ public class LigZernike {
             Volume v = new Volume();
             for (String dxf : result) {
                 String key = "";
-                if (dxf.contains("hydroele")){
-                    key = (skipflip) ? dxf+"_POS" : dxf; 
+                if (dxf.contains("hydroele")) {
+                    key = (skipflip) ? dxf + "_POS" : dxf;
                 } else {
                     key = dxf;
                 }
@@ -455,8 +554,8 @@ public class LigZernike {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
-        
-        double[] center = {0,0,0};
+
+        double[] center = { 0, 0, 0 };
         InvariantNorm n1 = new InvariantNorm(m1, center);
         InvariantNorm n2 = new InvariantNorm(m2, center);
         AlignmentResult alignment = n2.alignTo(n1);

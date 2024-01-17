@@ -18,12 +18,6 @@ project_hydrocav.dx
 project_hydroele.dx
 reconstructed_flip_contour.dx
 reconstructed.dx
-rocksdb_test.db/000018.log
-rocksdb_test.db/000021.sst
-rocksdb_test.db/CURRENT
-rocksdb_test.db/IDENTITY
-rocksdb_test.db/LOCK
-rocksdb_test.db/LOG
-rocksdb_test.db/MANIFEST-000017
-rocksdb_test.db/OPTIONS-000017
-rocksdb_test.db/OPTIONS-000020
+rocksdb_test.db/*
+rocksdb_test.db
+
