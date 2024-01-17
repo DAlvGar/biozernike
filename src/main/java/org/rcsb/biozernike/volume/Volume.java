@@ -51,10 +51,10 @@ public class Volume {
 	private double radiusVar = 0;
 	private double radiusMax = 0;
 
-	private double gridWidth = 0;
+	public double gridWidth = 0;
 	private double residuesNominalWeight = 0;
 
-	private BoundingBox bb = new BoundingBox((Bounds) null);
+	public BoundingBox bb = new BoundingBox((Bounds) null);
 
 	public Volume() {
 		this.radiusVarMult = DEFAULT_RADIUS_MULTIPLIER;
@@ -86,7 +86,7 @@ public class Volume {
 		this.radiusVarMult = other.radiusVarMult;
 	}
 
-	private void reset() {
+	public void reset() {
 		voxelArray = null;
 		originalVolumeMass = 0;
 		dimensions[0] = dimensions[1] = dimensions[2] = 0;
@@ -270,7 +270,7 @@ public class Volume {
 		}
 	}
 
-	private double getAutoGridWidth(BoundingBox bb) {
+	public double getAutoGridWidth(BoundingBox bb) {
 		double gridWidth = 1;
 		Point3d pLower = new Point3d();
 		Point3d pUpper = new Point3d();
@@ -697,6 +697,23 @@ public class Volume {
 
 	public void setCorner(double[] corner) {
 		this.corner = corner;
+	}
+
+	
+	public void setVoxelArray(double[] voxelArray) {
+		this.voxelArray = voxelArray;
+	}
+	
+	public void setDimensions(int[] dimensions) {
+		this.dimensions = dimensions;
+	}
+
+	public void setBB(BoundingBox bb) {
+		this.bb = bb;
+	}
+
+	public void setGridWidth(double gridWidth) {
+		this.gridWidth = gridWidth;
 	}
 
 	public double[] getCorner() {

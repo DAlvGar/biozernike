@@ -142,7 +142,7 @@ public class OpenDXIO {
 		return builder.toString().trim();
 	}
 
-	private static double[] rowToColumnFlatten(double[] rowFlatten, int[] dims) {
+	public static double[] rowToColumnFlatten(double[] rowFlatten, int[] dims) {
 		if (dims.length != 3) {
 			throw new IllegalArgumentException("Expected a 3D shape");
 		}
