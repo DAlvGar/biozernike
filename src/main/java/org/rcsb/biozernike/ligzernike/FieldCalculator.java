@@ -7,6 +7,7 @@ import org.rcsb.biozernike.volume.Volume;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -62,11 +63,33 @@ public class FieldCalculator {
     // return CompletableFuture.supplyAsync(() -> getField(molecule, fieldID));
     // }
 
+    public static List<Volume> projectMultiField(IAtomContainer molecule, int[] multifieldID) {
+        IAtomContainerExtremes moleculeExtremes = getMoleculeExtremes(molecule);
+        IGridSize gridSize = getGridSize(moleculeExtremes);
+        double[] corner = { gridSize.zeroX * spacing, gridSize.zeroY * spacing, gridSize.zeroZ * spacing };
+        int[] dimensions = { gridSize.ix, gridSize.iy, gridSize.iz };
+        List<List<Double>> atomParameters = SDFReader.getAtomFields(molecule);
+        List<Volume> volumeList = new ArrayList<>();
+        List<double[]> projections = getMultipleProjections(molecule, gridSize, atomParameters, multifieldID);
+
+        for (double[] projection : projections) {
+            double[] voxelArray = OpenDXIO.rowToColumnFlatten(projection, dimensions); // Transform order
+            Volume volume = new Volume();
+            volume.reset();
+            volume.setCorner(corner);
+            volume.setDimensions(dimensions);
+            volume.setGridWidth(spacing);
+            volume.setVoxelArray(voxelArray);
+            volumeList.add(volume);
+        }
+        return volumeList;
+    }
+
     public static Volume projectField(IAtomContainer molecule, int fieldID) {
         IAtomContainerExtremes moleculeExtremes = getMoleculeExtremes(molecule);
         IGridSize gridSize = getGridSize(moleculeExtremes);
-        double[] corner = {gridSize.zeroX * spacing, gridSize.zeroY * spacing, gridSize.zeroZ * spacing};
-        int[] dimensions = {gridSize.ix, gridSize.iy, gridSize.iz};
+        double[] corner = { gridSize.zeroX * spacing, gridSize.zeroY * spacing, gridSize.zeroZ * spacing };
+        int[] dimensions = { gridSize.ix, gridSize.iy, gridSize.iz };
         List<List<Double>> atomParameters = SDFReader.getAtomFields(molecule);
 
         double[] projections = getProjections(molecule, gridSize, atomParameters, fieldID);
@@ -97,13 +120,51 @@ public class FieldCalculator {
 
                     Atom atom = new Atom(xcoordinate, ycoordinate, zcoordinate);
 
-                    projections[gridPoint] = newProjection(atom, molecule, fieldID, atomParameters) * 10; // TODO: WHY SCALE IS DIFFERENT??
+                    projections[gridPoint] = newProjection(atom, molecule, fieldID, atomParameters) * 10; // TODO: WHY
+                                                                                                          // SCALE IS
+                                                                                                          // DIFFERENT??
                     gridPoint++;
                 }
             }
         }
 
         return projections;
+    }
+
+    private static List<double[]> getMultipleProjections(IAtomContainer molecule, IGridSize gridSize,
+            List<List<Double>> atomParameters,
+            int[] multifieldID) {
+
+        int N = multifieldID.length;
+        List<double[]> projectionList = new ArrayList<>(N);
+        for (int f : multifieldID) {
+            projectionList.add(new double[gridSize.iNumGridPoints]);
+        }
+        int gridPoint = 0;
+        double[] partial = new double[N];
+        for (int index = 0; index < gridSize.ix; index++) {
+            double xcoordinate = (index + gridSize.zeroX) * spacing;
+
+            for (int jIndex = 0; jIndex < gridSize.iy; jIndex++) {
+                double ycoordinate = (jIndex + gridSize.zeroY) * spacing;
+
+                for (int kIndex = 0; kIndex < gridSize.iz; kIndex++) {
+                    double zcoordinate = (kIndex + gridSize.zeroZ) * spacing;
+
+                    Atom atom = new Atom(xcoordinate, ycoordinate, zcoordinate);
+
+                    partial = newProjectionMulti(atom, molecule, multifieldID, atomParameters); // TODO:
+
+                    for (int k = 0; k < N; k++) {
+                        projectionList.get(k)[gridPoint] = partial[k] * 10;
+                    }
+
+                    gridPoint++;
+                }
+            }
+        }
+
+        return projectionList;
     }
 
     private static IGridSize getGridSize(IAtomContainerExtremes moleculeExtremes) {
@@ -156,6 +217,36 @@ public class FieldCalculator {
             }
         }
         return extremes;
+    }
+
+    private static double[] newProjectionMulti(Atom atom, IAtomContainer molecule, int[] multifieldID,
+            List<List<Double>> atomParameters) {
+        double sqrDistance;
+        double[] projection = new double[multifieldID.length];
+        double minimumDist = 999;
+        Atom newAtom;
+
+        for (int lIndex = 0; lIndex < molecule.getAtomCount(); lIndex++) {
+            newAtom = new Atom(molecule.getAtom(lIndex).getPoint3d().x,
+                    molecule.getAtom(lIndex).getPoint3d().y,
+                    molecule.getAtom(lIndex).getPoint3d().z);
+            sqrDistance = atom.squareEuclideanDistance(newAtom);
+
+            for (int i = 0; i < multifieldID.length; i++) {
+                int fieldID = multifieldID[i];
+                double param = atomParameters.get(lIndex).get(fieldID);
+                if (fieldID < 5) { // below 5 is charge and hydrophobic numbers, columns 6th and 7th are hbonds
+                    projection[i] += getExponentialProjection(param, sqrDistance);
+                } else if (sqrDistance < minimumDist
+                        && sqrDistance < 1.5
+                        && Math.abs(param) == 1) {
+                    minimumDist = sqrDistance;
+                    projection[i] = param / sqrDistance;
+                }
+            }
+        }
+
+        return projection;
     }
 
     private static double newProjection(Atom atom, IAtomContainer molecule, int fieldID,

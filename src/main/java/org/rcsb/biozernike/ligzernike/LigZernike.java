@@ -97,9 +97,10 @@ public class LigZernike {
                         .map(p -> p.toString()) // convert path to string
                         .filter(f -> f.endsWith("sdf")) // check end with
                         .collect(Collectors.toList()); // collect all matched to a List
-            };
+            }
+            ;
             if (result != null) {
-                for (String sdf: result){
+                for (String sdf : result) {
                     process_sdf_(sdf, momentsDB, FPDB, order);
                 }
                 System.out.println("DONE PROCESSING SDF FOLDER " + sdfFile);
@@ -108,7 +109,7 @@ public class LigZernike {
             }
 
         } else {
-            process_sdf_(sdfFile, momentsDB, FPDB, order); 
+            process_sdf_(sdfFile, momentsDB, FPDB, order);
             System.out.println("DONE PROCESSING SDF FILE " + sdfFile);
         }
         momentsDB.close();
@@ -137,25 +138,28 @@ public class LigZernike {
     }
 
     public static void process_sdf_(String sdfPath, RocksDBInterface momentsDB, RocksDBInterface FPDB, int order) {
-        HashMap<String, Integer> maps = new HashMap<String, Integer>();
+        HashMap<Integer, String> maps = new HashMap<Integer, String>();
         // maps.put("hydrototal", 1);
-        maps.put("hydroele", 2);
-        maps.put("hydrocav", 3);
+        maps.put(2, "hydroele");
+        maps.put(3, "hydrocav");
         // maps.put("hydrovdw", 4);
-        maps.put("hbond_Donors", 5);
-        maps.put("hbond_Acceptors", 6);
+        maps.put(5, "hbond_Donors");
+        maps.put(6, "hbond_Acceptors");
 
         try (IteratingSDFReader reader = SDFReader.read(sdfPath)) {
             IAtomContainer molecule;
             while (reader.hasNext()) {
                 molecule = reader.next();
-                // Process coordinates of atoms in the molecule
-                for (String m : maps.keySet()) {
-                    Volume volume = FieldCalculator.projectField(molecule, maps.get(m));
+                int[] fieldIDs = maps.keySet().stream().mapToInt(i -> i).toArray();
+                List<Volume> volumeList = FieldCalculator.projectMultiField(molecule, fieldIDs);
+                int NTypes = fieldIDs.length;
+                for (int i = 0; i < NTypes; i++) {
+                    String m = maps.get(fieldIDs[i]);
                     String key = molecule.getTitle() + "_" + m;
+                    Volume volume = volumeList.get(i);
                     if (m.contains("hydroele")) {
                         Volume pos = new Volume(volume); // Copy
-                        // NEGATIVE PART
+                        // NEGATIVE PART and POSITIVE part apart
                         prepareVolume(volume, 0, 20, true, true, 1.0);
                         prepareVolume(pos, 0, 20, false, true, 1.0);
                         calMomentsAndStore(key, volume, order, momentsDB, FPDB);
