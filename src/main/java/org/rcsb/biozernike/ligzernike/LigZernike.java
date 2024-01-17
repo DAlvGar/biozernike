@@ -9,6 +9,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -26,6 +29,7 @@ import org.rcsb.biozernike.zernike.ZernikeMoments;
 import org.rcsb.biozernike.zernike.ZernikeMomentsIO;
 import org.biojava.nbio.structure.*;
 import org.biojava.nbio.structure.io.PDBFileReader;
+import org.forester.development.neTest;
 import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.io.iterator.IteratingSDFReader;
 
@@ -83,6 +87,8 @@ public class LigZernike {
             @Option(names = {
                     "--fpdb" }, defaultValue = "fp.db", description = "RocksDB to store invariant fingerprint") String fpDBPath,
             @Option(names = {
+                    "--threads" }, defaultValue = "1", description = "Number of threads to use") int nThreads,
+            @Option(names = {
                     "-N" }, required = true, description = "Zernike order (0 to 20)") int order)
             throws IOException {
 
@@ -101,7 +107,7 @@ public class LigZernike {
             ;
             if (result != null) {
                 for (String sdf : result) {
-                    process_sdf_(sdf, momentsDB, FPDB, order);
+                    process_sdf_(sdf, momentsDB, FPDB, order, nThreads);
                 }
                 System.out.println("DONE PROCESSING SDF FOLDER " + sdfFile);
             } else {
@@ -109,7 +115,7 @@ public class LigZernike {
             }
 
         } else {
-            process_sdf_(sdfFile, momentsDB, FPDB, order);
+            process_sdf_(sdfFile, momentsDB, FPDB, order, nThreads);
             System.out.println("DONE PROCESSING SDF FILE " + sdfFile);
         }
         momentsDB.close();
@@ -137,7 +143,7 @@ public class LigZernike {
         FPDB.putFP(key, fp);
     }
 
-    public static void process_sdf_(String sdfPath, RocksDBInterface momentsDB, RocksDBInterface FPDB, int order) {
+    public static void process_sdf_(String sdfPath, RocksDBInterface momentsDB, RocksDBInterface FPDB, int order, int nThreads) {
         HashMap<Integer, String> maps = new HashMap<Integer, String>();
         // maps.put("hydrototal", 1);
         maps.put(2, "hydroele");
@@ -147,35 +153,49 @@ public class LigZernike {
         maps.put(6, "hbond_Acceptors");
 
         try (IteratingSDFReader reader = SDFReader.read(sdfPath)) {
-            IAtomContainer molecule;
+            ExecutorService executor = Executors.newFixedThreadPool(nThreads);
+
             while (reader.hasNext()) {
-                molecule = reader.next();
+                IAtomContainer molecule = reader.next();
                 int[] fieldIDs = maps.keySet().stream().mapToInt(i -> i).toArray();
-                List<Volume> volumeList = FieldCalculator.projectMultiField(molecule, fieldIDs);
                 int NTypes = fieldIDs.length;
-                for (int i = 0; i < NTypes; i++) {
-                    String m = maps.get(fieldIDs[i]);
-                    String key = molecule.getTitle() + "_" + m;
-                    Volume volume = volumeList.get(i);
-                    if (m.contains("hydroele")) {
-                        Volume pos = new Volume(volume); // Copy
-                        // NEGATIVE PART and POSITIVE part apart
-                        prepareVolume(volume, 0, 20, true, true, 1.0);
-                        prepareVolume(pos, 0, 20, false, true, 1.0);
-                        calMomentsAndStore(key, volume, order, momentsDB, FPDB);
-                        calMomentsAndStore(key + "_pos", pos, order, momentsDB, FPDB);
-                    } else if (m.contains("hydro")) {
-                        prepareVolume(volume, 0, 20, true, true, 1.0);
-                        calMomentsAndStore(key, volume, order, momentsDB, FPDB);
-                    } else {
-                        // hbond maps
-                        prepareVolume(volume, 0, 100, false, false, 10);
-                        calMomentsAndStore(key, volume, order, momentsDB, FPDB);
+
+                Runnable task = () -> {
+
+                    List<Volume> volumeList = FieldCalculator.projectMultiField(molecule, fieldIDs);
+                    for (int i = 0; i < NTypes; i++) {
+                        String m = maps.get(fieldIDs[i]);
+                        String key = molecule.getTitle() + "_" + m;
+                        Volume volume = volumeList.get(i);
+                        if (m.contains("hydroele")) {
+                            Volume pos = new Volume(volume); // Copy
+                            // NEGATIVE PART and POSITIVE part apart
+                            prepareVolume(volume, 0, 20, true, true, 1.0);
+                            prepareVolume(pos, 0, 20, false, true, 1.0);
+                            calMomentsAndStore(key, volume, order, momentsDB, FPDB);
+                            calMomentsAndStore(key + "_pos", pos, order, momentsDB, FPDB);
+                        } else if (m.contains("hydro")) {
+                            prepareVolume(volume, 0, 20, true, true, 1.0);
+                            calMomentsAndStore(key, volume, order, momentsDB, FPDB);
+                        } else {
+                            // hbond maps
+                            prepareVolume(volume, 0, 100, false, false, 10);
+                            calMomentsAndStore(key, volume, order, momentsDB, FPDB);
+                        }
                     }
-                }
+                };
+
+                executor.submit(task);
             }
             // Close the SDF reader
             reader.close();
+
+            executor.shutdown();
+            try {
+                executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
 
         } catch (IOException e) {
             e.printStackTrace();
