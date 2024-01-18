@@ -5,22 +5,20 @@ import org.rcsb.biozernike.molecules.SDFReader;
 import org.rcsb.biozernike.volume.OpenDXIO;
 import org.rcsb.biozernike.volume.Volume;
 
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+
+import javax.vecmath.Point3d;
 
 public class FieldCalculator {
 
-    private static double spacing = 0.75;
+    private static double spacing = 0.5;
     /**
      * frame
      * sets the size of the volume calculations, set a bigger frame to get more
-     * space to show fields
+     * space to show fields - IMPORTANT FOR ZERNIKE, EDGE EFFECTS ARE VERY PERTURBING FOR SIMILARITY CALCUALTIONS
      */
-    private static final double frame = 5;
+    private static final double frame = 10;
     private static double[][] exponentialFunctionParams = {
             { -0.25918178, 0.99676629 },
             { -0.19200658, 0.93042921 },
@@ -63,7 +61,7 @@ public class FieldCalculator {
     // return CompletableFuture.supplyAsync(() -> getField(molecule, fieldID));
     // }
 
-    public static List<Volume> projectMultiField(IAtomContainer molecule, int[] multifieldID) {
+    public List<Volume> projectMultiField(IAtomContainer molecule, int[] multifieldID) {
         IAtomContainerExtremes moleculeExtremes = getMoleculeExtremes(molecule);
         IGridSize gridSize = getGridSize(moleculeExtremes);
         double[] corner = { gridSize.zeroX * spacing, gridSize.zeroY * spacing, gridSize.zeroZ * spacing };
@@ -85,13 +83,14 @@ public class FieldCalculator {
         return volumeList;
     }
 
-    public static Volume projectField(IAtomContainer molecule, int fieldID) {
+    public Volume projectField(IAtomContainer molecule, int fieldID) {
         IAtomContainerExtremes moleculeExtremes = getMoleculeExtremes(molecule);
         IGridSize gridSize = getGridSize(moleculeExtremes);
         double[] corner = { gridSize.zeroX * spacing, gridSize.zeroY * spacing, gridSize.zeroZ * spacing };
         int[] dimensions = { gridSize.ix, gridSize.iy, gridSize.iz };
         List<List<Double>> atomParameters = SDFReader.getAtomFields(molecule);
-
+        System.out.println(moleculeExtremes.toString());
+        System.out.println(gridSize.toString());
         double[] projections = getProjections(molecule, gridSize, atomParameters, fieldID);
         double[] voxelArray = OpenDXIO.rowToColumnFlatten(projections, dimensions); // Transform order
         Volume volume = new Volume();
@@ -150,15 +149,11 @@ public class FieldCalculator {
 
                 for (int kIndex = 0; kIndex < gridSize.iz; kIndex++) {
                     double zcoordinate = (kIndex + gridSize.zeroZ) * spacing;
-
                     Atom atom = new Atom(xcoordinate, ycoordinate, zcoordinate);
-
-                    partial = newProjectionMulti(atom, molecule, multifieldID, atomParameters); // TODO:
-
+                    partial = newProjectionMulti(atom, molecule, multifieldID, atomParameters);
                     for (int k = 0; k < N; k++) {
-                        projectionList.get(k)[gridPoint] = partial[k] * 10;
+                        projectionList.get(k)[gridPoint] = partial[k] * 10; // TODO: why scale is different?
                     }
-
                     gridPoint++;
                 }
             }
@@ -192,28 +187,33 @@ public class FieldCalculator {
 
     private static IAtomContainerExtremes getMoleculeExtremes(IAtomContainer molecule) {
         IAtomContainerExtremes extremes = new IAtomContainerExtremes();
-        for (int i = 0; i < molecule.getAtomCount(); i++) {
-            double x = molecule.getAtom(i).getPoint3d().x;
-            double y = molecule.getAtom(i).getPoint3d().y;
-            double z = molecule.getAtom(i).getPoint3d().z;
+        Point3d p = molecule.getAtom(0).getPoint3d();
+        extremes.xmin = p.x;
+        extremes.xmax = p.x;
+        extremes.ymin = p.y;
+        extremes.ymax = p.y;
+        extremes.zmin = p.z;
+        extremes.zmax = p.z;
+        for (int i = 1; i < molecule.getAtomCount(); i++) {
+            p = molecule.getAtom(i).getPoint3d();
 
-            if (x > extremes.xmax) {
-                extremes.xmax = x;
+            if (p.x > extremes.xmax) {
+                extremes.xmax = p.x;
             }
-            if (x < extremes.xmin) {
-                extremes.xmin = x;
+            if (p.x < extremes.xmin) {
+                extremes.xmin = p.x;
             }
-            if (y > extremes.ymax) {
-                extremes.ymax = y;
+            if (p.y > extremes.ymax) {
+                extremes.ymax = p.y;
             }
-            if (y < extremes.ymin) {
-                extremes.ymin = y;
+            if (p.y < extremes.ymin) {
+                extremes.ymin = p.y;
             }
-            if (z > extremes.zmax) {
-                extremes.zmax = z;
+            if (p.z > extremes.zmax) {
+                extremes.zmax = p.z;
             }
-            if (z < extremes.zmin) {
-                extremes.zmin = z;
+            if (p.z < extremes.zmin) {
+                extremes.zmin = p.z;
             }
         }
         return extremes;
@@ -336,6 +336,10 @@ public class FieldCalculator {
                 + (exponentialFunctionParams[exponentialIndex][0] * sqrDistance * atomParameter);
     }
 
+    public void setSpacing(double new_spacing){
+        spacing = new_spacing;
+    }
+
     private static class Atom {
         private final double x;
         private final double y;
@@ -366,6 +370,14 @@ public class FieldCalculator {
         private int iy;
         private int iz;
         private int iNumGridPoints;
+
+        @Override
+        public String toString() {
+            return String.format("IGridSize{" +
+                    "xmax=%.2f, xmin=%.2f, ymax=%.2f, ymin=%.2f, zmax=%.2f, zmin=%.2f, " +
+                    "zeroX=%d, zeroY=%d, zeroZ=%d, ix=%d, iy=%d, iz=%d, iNumGridPoints=%d}",
+                    xmax, xmin, ymax, ymin, zmax, zmin, zeroX, zeroY, zeroZ, ix, iy, iz, iNumGridPoints);
+        }
     }
 
     private static class IAtomContainerExtremes {
@@ -375,5 +387,12 @@ public class FieldCalculator {
         private double ymin;
         private double zmax;
         private double zmin;
+
+        @Override
+        public String toString() {
+            return String.format("IAtomContainerExtremes{" +
+                    "xmax=%.2f, xmin=%.2f, ymax=%.2f, ymin=%.2f, zmax=%.2f, zmin=%.2f}",
+                    xmax, xmin, ymax, ymin, zmax, zmin);
+        }
     }
 }

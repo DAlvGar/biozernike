@@ -17,6 +17,10 @@ psql = VectorDatabase(target,dbname='dalvarez', user='dalvarez', password='psqld
 #psql.clear_table()
 #psql.drop_table()
 
+# check if its hydroele and contains also POS or pos
+def isPosMap(input_string):
+   return ('hydroele') in input_string and (('_POS' in input_string) or ('_pos' in input_string))
+
 def parse_string(input_string):
     pattern = r".*/\d+_(?P<molid>[A-Za-z0-9]+)-(?P<active>[A-Za-z]+[A-Za-z0-9_]*)\.(?P<conformer>\d+)_(?P<map>[A-Za-z_]+)\.dx"
     match = re.match(pattern, input_string)
@@ -31,7 +35,7 @@ def parse_string(input_string):
         else: result_dict['active'] = True
         
         # special treatment for hydroele_pos
-        if input_string.contains('hydroele') and input_string.contains('_POS'): result_dict['map'] = 'hydroele_POS'
+        if isPosMap(input_string): result_dict['map'] = 'hydroele_pos'
         
         return result_dict
     else:
@@ -80,8 +84,8 @@ for i in range(start_at, N_dbs+1):
     i=0
     while (x := next(it, None)) is not None:
         k = x[0].decode('utf8')
-        if not ('hydroele' in k and '_POS' in k): continue # focus only on the ones we need to process now :)
-        if check_db and psql.exists(k)): continue
+        if not isPosMap(k): continue # focus only on the ones we need to process now :)
+        if (check_db and psql.exists(k)): continue
         e = parseEntry(x)
         if not e:
             print('.', end='', flush=True)
