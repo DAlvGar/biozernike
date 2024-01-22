@@ -168,7 +168,7 @@ public class DescriptorTest {
 		OpenDXIO.write("1hss_vol.dx", volumeStructure);
 
 		InvariantNorm normalizationStructure = new InvariantNorm(volumeStructure, 6);
-
+		normalizationStructure.getInvariants(2);
 		double distance = normalizationStructure.compareInvariants(normalizationEM,2);
 
 		// CN of the order 2,2 are not too different

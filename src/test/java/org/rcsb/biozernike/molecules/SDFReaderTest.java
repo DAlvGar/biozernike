@@ -16,6 +16,9 @@ public class SDFReaderTest {
         while (reader.hasNext()) {
             IAtomContainer molecule = reader.next();
             // Process coordinates of atoms in the molecule
+            System.out.println(molecule.getTitle());
+            String ctab = SDFReader.getCTABString(molecule);
+            System.err.println(ctab);
             List<List<Double>> f = SDFReader.getAtomFields(molecule);
             System.out.println(f);
         }

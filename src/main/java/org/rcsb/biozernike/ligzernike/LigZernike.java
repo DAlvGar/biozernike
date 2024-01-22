@@ -1,5 +1,8 @@
 package org.rcsb.biozernike.ligzernike;
 
+import static java.lang.Math.pow;
+import static java.lang.Math.sqrt;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -7,8 +10,10 @@ import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -16,12 +21,15 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.vecmath.Matrix4d;
+import javax.vecmath.Point3d;
 
 import org.apache.commons.io.FileUtils;
-
+import org.apache.commons.lang.time.DurationFormatUtils;
+import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.rcsb.biozernike.AlignmentResult;
 import org.rcsb.biozernike.InvariantNorm;
 import org.rcsb.biozernike.complex.Complex;
+import org.rcsb.biozernike.descriptor.Descriptor;
 import org.rcsb.biozernike.molecules.SDFReader;
 import org.rcsb.biozernike.volume.OpenDXIO;
 import org.rcsb.biozernike.volume.Volume;
@@ -30,6 +38,7 @@ import org.rcsb.biozernike.zernike.ZernikeMomentsIO;
 import org.biojava.nbio.structure.*;
 import org.biojava.nbio.structure.io.PDBFileReader;
 import org.forester.development.neTest;
+import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.io.iterator.IteratingSDFReader;
 
@@ -38,12 +47,17 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import org.apache.commons.math3.stat.descriptive.moment.*;
+import org.apache.commons.math3.stat.descriptive.rank.Percentile;
+
 /**
  * Hello world!
  *
  */
 @Command(name = "LigZernike", mixinStandardHelpOptions = true, description = "Tool to work with volumetric files and 3D zernikes for ligands", version = "1.0")
 public class LigZernike {
+    private static final double[] PERCENTILES_FOR_GEOM = { 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0 };
+    private static final int[] INVARIANT_ORDERS = { 2, 4, 6 };
 
     public Volume loadMoleculeVolume(String filename, double minCap, double maxCap, boolean flip, boolean normalize,
             double multiplier)
@@ -78,7 +92,7 @@ public class LigZernike {
         return structure;
     }
 
-    private static void prepareVolume(Volume v1, double minCap, double maxCap, boolean flip, boolean normalize,
+    public static void prepareVolume(Volume v1, double minCap, double maxCap, boolean flip, boolean normalize,
             double multiplier) {
         if (flip)
             v1.flipValues(); // Turn negative to positive and viceversa
@@ -89,7 +103,7 @@ public class LigZernike {
         v1.updateCenter();
     }
 
-    private static void calMomentsAndStore_rocksdb(String key, Volume volume, int order, RocksDBInterface momentsDB,
+    public static void calMomentsAndStore_rocksdb(String key, Volume volume, int order, RocksDBInterface momentsDB,
             RocksDBInterface FPDB) {
         InvariantNorm n = new InvariantNorm(volume, order);
         List<Double> fp = n.getFingerprint();
@@ -99,7 +113,30 @@ public class LigZernike {
         FPDB.putFP(key, fp);
     }
 
-    private static void calMomentsAndStore_txt(String key, Volume volume, int order, String outPrefix) {
+    public static void calMomentsAndStore_psql(Integer conformerID, String mapName, Volume volume, Integer order,
+            VectorDatabaseImpl db) {
+        InvariantNorm n = new InvariantNorm(volume, order);
+        List<Double> fp = n.getFingerprint();
+        Double i = fp.get(0);
+
+        if (Double.isNaN(i) | Double.isInfinite(i) | i == null) {
+            return; // Moments don't exist, skip volumes insertion
+        }
+
+        // Store map in conformer
+        int volumeID = db.insertVolumeMap(conformerID, mapName);
+        db.insertFPVector(volumeID, listToArray(fp));
+
+        for (int invOrder : INVARIANT_ORDERS) {
+            List<Double> imoments = n.getInvariants(invOrder);
+            i = imoments.get(0);
+            if (Double.isNaN(i) | Double.isInfinite(i) | i == null) {
+                db.insertMoments(volumeID, invOrder, listToArray(imoments));
+            }
+        }
+    }
+
+    public static void calMomentsAndStore_txt(String key, Volume volume, int order, String outPrefix) {
         String dest = outPrefix + key;
         InvariantNorm n = new InvariantNorm(volume, order);
         List<Double> fp = n.getFingerprint();
@@ -110,6 +147,12 @@ public class LigZernike {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
+    }
+
+    private static double[] listToArray(List<Double> i) {
+        return i.stream()
+                .mapToDouble(d -> d)
+                .toArray();
     }
 
     /**
@@ -132,7 +175,7 @@ public class LigZernike {
      */
     public static void process_sdf_(HashMap<Integer, String> maps, String sdfPath, RocksDBInterface momentsDB,
             RocksDBInterface FPDB, int order, int nThreads, boolean writeFiles, boolean printDX, String outPrefix) {
-                
+
         try (IteratingSDFReader reader = SDFReader.read(sdfPath)) {
             ExecutorService executor = Executors.newFixedThreadPool(nThreads);
             FieldCalculator calculator = new FieldCalculator();
@@ -204,7 +247,212 @@ public class LigZernike {
         }
     }
 
+    private static double getRadius(Point3d[] reprPoints) {
+
+        // Find the minimum and maximum values along all points
+        double minX = Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE;
+        double minZ = Double.MAX_VALUE;
+        double maxX = Double.MIN_VALUE;
+        double maxY = Double.MIN_VALUE;
+        double maxZ = Double.MIN_VALUE;
+
+        for (Point3d point : reprPoints) {
+            minX = Math.min(minX, point.x);
+            minY = Math.min(minY, point.y);
+            minZ = Math.min(minZ, point.z);
+            maxX = Math.max(maxX, point.x);
+            maxY = Math.max(maxY, point.y);
+            maxZ = Math.max(maxZ, point.z);
+        }
+
+        return sqrt(pow((maxX - minX), 2) + pow((maxY - minY), 2) + pow((maxZ - minZ), 2)) / 2.;
+    }
+
+    private static double[] calcGeometricDescriptor(IAtomContainer molecule) {
+        Point3d[] reprPoints = SDFReader.getAtomPositions(molecule);
+
+        List<Double> geomDescriptorList = new ArrayList<>();
+        geomDescriptorList.add(getRadius(reprPoints));
+
+        // geomDescriptorList.add(volume.getResiduesNominalWeight());
+
+        Point3d centerPoint = new Point3d(0, 0, 0);
+
+        for (Point3d selPoint : reprPoints) {
+            centerPoint.add(selPoint);
+        }
+        centerPoint.scale(1 / (double) reprPoints.length);
+
+        double[] distances = new double[reprPoints.length];
+        for (int iPoint = 0; iPoint < reprPoints.length; iPoint++) {
+            distances[iPoint] = centerPoint.distance(reprPoints[iPoint]);
+        }
+
+        StandardDeviation standardDeviation = new StandardDeviation();
+        Skewness skewness = new Skewness();
+        Kurtosis kurtosis = new Kurtosis();
+        Percentile percentile = new Percentile();
+        percentile.setData(distances);
+
+        for (double p : PERCENTILES_FOR_GEOM) {
+            geomDescriptorList.add(percentile.evaluate(p));
+        }
+
+        geomDescriptorList.add(standardDeviation.evaluate(distances));
+        geomDescriptorList.add(skewness.evaluate(distances));
+        geomDescriptorList.add(kurtosis.evaluate(distances));
+
+        return listToArray(geomDescriptorList);
+    }
+
+    /**
+     * Process sdf file and insert data directly to a PSQL database
+     * 
+     * @param maps     maps to generate
+     * @param sdfPath  path to sdf file to process
+     * @param order    zernike order
+     * @param nThreads
+     * @throws CDKException
+     */
+    public static void process_sdf_PSQL(HashMap<Integer, String> maps, String target, String sdfPath,
+            int order, int nThreads, VectorDatabaseImpl db) throws CDKException {
+
+        // Create target in DB if not exists
+        db.insertTarget(target);
+
+        int[] fieldIDs = maps.keySet().stream().mapToInt(i -> i).toArray();
+        int NTypes = fieldIDs.length;
+
+        try (IteratingSDFReader reader = SDFReader.read(sdfPath)) {
+            ExecutorService executor = Executors.newFixedThreadPool(nThreads);
+            FieldCalculator calculator = new FieldCalculator();
+            while (reader.hasNext()) {
+                IAtomContainer molecule = reader.next();
+                String molTitle = molecule.getTitle();
+                Map<String, Object> molInfo = SDFReader.parseString(molTitle);
+                int molid = db.getMoleculeId((String) molInfo.get("molid"));
+                if (molid == -1) {
+                    String smiles = SDFReader.getCanonicalSmiles(molecule);
+                    molid = db.insertMolecule(target, (String) molInfo.get("molid"),
+                            (boolean) molInfo.get("active"), smiles);
+                }
+                String ctab = SDFReader.getCTABString(molecule);
+                int confid = db.insertConformer(molid, (Integer) molInfo.get("conformer"),
+                        calcGeometricDescriptor(molecule), ctab, molTitle);
+
+                Runnable task = () -> {
+                    List<Volume> volumeList = calculator.projectMultiField(molecule, fieldIDs);
+                    for (int i = 0; i < NTypes; i++) {
+                        String m = maps.get(fieldIDs[i]);
+                        // String key = molecule.getTitle() + "_" + m;
+                        Volume volume = volumeList.get(i);
+                        if (m.contains("hydroele")) {
+                            Volume pos = new Volume(volume); // Copy
+                            // NEGATIVE PART and POSITIVE part apart
+                            prepareVolume(volume, 0, 20, true, true, 1.0);
+                            prepareVolume(pos, 0, 20, false, true, 1.0);
+                            calMomentsAndStore_psql(confid, m, volume, order, db);
+                            calMomentsAndStore_psql(confid, m + "_pos", pos, order, db);
+                        } else if (m.contains("hydro")) {
+                            prepareVolume(volume, 0, 20, true, true, 1.0);
+                            calMomentsAndStore_psql(confid, m, volume, order, db);
+                        } else {
+                            // hbond maps
+                            prepareVolume(volume, 0, 100, false, false, 10);
+                            calMomentsAndStore_psql(confid, m, volume, order, db);
+                        }
+                    }
+                };
+                executor.submit(task);
+            }
+            // Close the SDF reader
+            reader.close();
+
+            executor.shutdown();
+            try {
+                executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     @Command(name = "process_sdf", description = "Generates projections of molecules in sdf file(s) with hydrophobic values precomputed to moments and fingerprints inserted into rocksdbs.")
+    public void process_sdf_psql(@Parameters(description = "SDF input") String sdfFile,
+            @Option(names = {
+                    "--target" }, required = true, description = "Target name") String target,
+            @Option(names = {
+                    "--folder" }, description = "Flag if input is a folder, will read all SDF files inside if that's the case. Default: FALSE (treat single file)") boolean isFolder,
+            @Option(names = {
+                    "--threads" }, defaultValue = "1", description = "Number of threads to use") int nThreads,
+            @Option(names = {
+                    "-N" }, required = true, description = "Zernike order (0 to 20)") int order)
+            throws IOException {
+
+        HashMap<Integer, String> maps = new HashMap<Integer, String>();
+        maps.put(2, "hydroele");
+        maps.put(3, "hydrocav");
+        maps.put(5, "hbond_Donors");
+        maps.put(6, "hbond_Acceptors");
+        // maps.put("hydrototal", 1);
+        // maps.put("hydrovdw", 4);
+
+        VectorDatabaseImpl db = new VectorDatabaseImpl();
+
+        // Process hydroele and cav
+        if (isFolder) {
+            List<String> result;
+            try (Stream<Path> walk = Files.walk(Paths.get(sdfFile))) {
+                result = walk
+                        .filter(p -> !Files.isDirectory(p)) // not a directory
+                        .map(p -> p.toString()) // convert path to string
+                        .filter(f -> f.endsWith("sdf")) // check end with
+                        .collect(Collectors.toList()); // collect all matched to a List
+            }
+            if (result != null) {
+                int counter = 0;
+                int N = result.size();
+                long time0 = System.currentTimeMillis();
+                for (String sdf : result) {
+
+                    long time = System.currentTimeMillis();
+                    counter++;
+                    try {
+                        process_sdf_PSQL(maps, target, sdf, order, nThreads, db);
+                    } catch (CDKException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                    long completedIn = System.currentTimeMillis() - time;
+                    System.out.println("DONE WITH FILE (" + counter + "/" + N + ")" + sdf);
+                    System.out.println(DurationFormatUtils.formatDuration(completedIn, "HH:mm:ss:SS"));
+                }
+                long completedAll = System.currentTimeMillis() - time0;
+                System.out.println("DONE PROCESSING SDF FOLDER " + sdfFile);
+                System.out.println(DurationFormatUtils.formatDuration(completedAll, "HH:mm:ss:SS"));
+            } else {
+                System.out.println("NOTHING DONE ON " + sdfFile);
+            }
+        } else {
+            try {
+                long time0 = System.currentTimeMillis();
+                process_sdf_PSQL(maps, target, sdfFile, order, nThreads, db);
+                long completedAll = System.currentTimeMillis() - time0;
+                System.out.println(DurationFormatUtils.formatDuration(completedAll, "HH:mm:ss:SS"));
+            } catch (CDKException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+            System.out.println("DONE PROCESSING SDF FILE " + sdfFile);
+        }
+        db.closeConnection();
+    }
+
+    @Command(name = "process_sdf_ext", description = "Generates projections of molecules in sdf file(s) with hydrophobic values precomputed to moments and fingerprints inserted into rocksdbs.")
     public void process_sdf(@Parameters(description = "SDF input") String sdfFile,
             @Option(names = {
                     "--folder" }, description = "Flag if input is a folder, will read all SDF files inside if that's the case. Default: FALSE (treat single file)") boolean isFolder,

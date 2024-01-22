@@ -4,30 +4,38 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintWriter;
+
 import java.net.URL;
+
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import javax.vecmath.Matrix3d;
 import javax.vecmath.Matrix4d;
-import javax.vecmath.Point3d;
+import javax.vecmath.Vector3d;
 
-import org.apache.commons.lang.StringUtils;
 import org.biojava.nbio.structure.Calc;
-import org.biojava.nbio.structure.Chain;
 import org.biojava.nbio.structure.Structure;
-import org.biojava.nbio.structure.StructureIO;
-import org.biojava.nbio.structure.StructureTools;
 import org.biojava.nbio.structure.io.PDBFileReader;
+
 import org.junit.Test;
+
+import org.openscience.cdk.interfaces.IAtomContainer;
+import org.openscience.cdk.io.iterator.IteratingSDFReader;
+
+import org.rcsb.biozernike.ligzernike.FieldCalculator;
+import org.rcsb.biozernike.ligzernike.LigZernike;
+import org.rcsb.biozernike.molecules.SDFReader;
 import org.rcsb.biozernike.volume.MapFileType;
 import org.rcsb.biozernike.volume.OpenDXIO;
 import org.rcsb.biozernike.volume.Volume;
 import org.rcsb.biozernike.volume.VolumeIO;
 import org.rcsb.biozernike.zernike.ZernikeMoments;
 import org.rcsb.biozernike.zernike.ZernikeMomentsIO;
+
+import Jama.Matrix;
 
 public class LigZernikeTest {
 
@@ -48,7 +56,7 @@ public class LigZernikeTest {
         return v1;
     }
 
-    //@Test
+    // @Test
     public void testMomentsWrite() throws Exception {
         String outPrefix = "test_norms";
         Volume vol1 = loadMoleculeVolume("mol1_HDON.dx");
@@ -58,16 +66,45 @@ public class LigZernikeTest {
     }
 
     @Test
-    public void play() {
-        String pattern = "";
-        String s = "99_CHEMBL215947-act.9_hydroele.dx";
-        System.out.println(s.contains(pattern));
-        
-        String re = "[(hydroele)|(cav)]";
-        System.out.println(s.contains(re));
+    public void sdfToMoments() throws Exception {
+        String path = LigZernikeTest.class.getResource("/test_translated.sdf").getPath();
+        int[] fields = { 2, 3, 5, 6 }; // Set the desired field ID
+        String[] names = { "hydroele", "hydrocav", "hbond_Donors", "hbond_Acceptors" };
+        double[] spacing = { 0.5, 0.5, 0.5, 0.5 };
+        FieldCalculator calculator = new FieldCalculator();
+
+        try (IteratingSDFReader reader = SDFReader.read(path)) {
+            IAtomContainer molecule;
+            while (reader.hasNext()) {
+                molecule = reader.next();
+                Volume volume = calculator.projectField(molecule, 6); // acceptors
+                OpenDXIO.write("Ligands/projection_acceptor_orig.dx", volume);
+                LigZernike.prepareVolume(volume, 0, 100, false, true, 1.);
+                OpenDXIO.write("Ligands/projection_acceptor_prepared.dx", volume);
+                ZernikeMoments m = new ZernikeMoments(volume, 15);
+                InvariantNorm i = new InvariantNorm(m);
+                List<MomentTransform> ligandTransforms = i.getNormalizationSolutions(2);
+                MomentTransform ligandTransform = ligandTransforms.get(0);
+                Matrix4d M = ligandTransform.getCoordTransform(i.getCenter());
+                System.out.println(M.toString());
+                System.out.println(String.format("Translation: %.3f, %.3f, %.3f", volume.getCenterReal()[0],
+                        volume.getCenterReal()[1], volume.getCenterReal()[2]));
+                // double gridWidth, double scale_factor, boolean useCache, boolean saveCache)
+                int[] d = { 32, 32, 32 };
+                double[] c = { 16., 16., 16. };
+                // Volume volume_rec = ZernikeMoments.reconstructVolume(m, d, c, 15, 0.5, 1.5,
+                // true, true);
+
+                // OpenDXIO.write("Ligands/projection_acceptor_rec.dx", volume_rec);
+            }
+            // Close the SDF reader
+            reader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
-    //@Test
+    // @Test
     public void testMomentsRead() throws Exception {
         /*
          * object 1 class gridpositions counts 45 49 45
@@ -77,11 +114,12 @@ public class LigZernikeTest {
          * delta 0 0 1
          */
         Volume vol1 = loadMoleculeVolume("mol1_HDON.dx");
-        System.out.println(vol1.getCenterVolume()[0]+" "+vol1.getCenterVolume()[1]+" "+vol1.getCenterVolume()[2]);
+        System.out
+                .println(vol1.getCenterVolume()[0] + " " + vol1.getCenterVolume()[1] + " " + vol1.getCenterVolume()[2]);
         int[] dimensions = { 45, 49, 45 };
         double[] origin = { -23.41, -29.04, -18.11 };
         double[] center = { dimensions[0] / 2., dimensions[1] / 2., dimensions[2] / 2. };
-        //double[] center = {0,0,0};
+        // double[] center = {0,0,0};
         int _maxN = 15;
         double gridWidth = 1;
         double scale_factor = 2.;
@@ -293,7 +331,7 @@ public class LigZernikeTest {
     @Test
     public void testLigands() throws Exception {
         int max_order = 15;
-        String[] fileNames = { "mol1_HDON.dx", "mol2_HDON.dx", "mol3_HDON.dx", "mol4_HDON.dx",
+        String[] fileNames = { "mol1_HDON.dx", "mol2_HDON.dx", "mol3_HDON.dx", "mol4_HDON.dx","mol5_HDON.dx",
                 "phmscreen_ref_hydroele.dx" };
         int n_files = fileNames.length;
         Volume[] volumeArray = new Volume[n_files];
@@ -311,11 +349,16 @@ public class LigZernikeTest {
         }
 
         // Calculate distances
-        for (var i = 0; i < n_files; i++) {
-            InvariantNorm invariant1 = invariantsArray.get(i);
-            for (var j = i + 1; j < n_files; j++) {
-                double d = invariant1.compareInvariants(invariantsArray.get(j), 0); // 0 is basic fingerprints
-                System.out.println("Distance " + i + " - " + j + " : " + d);
+        for (var d = 0; d < 6; d++) {
+            System.err.println("Distance with Invariants on order "+d);
+            for (var i = 0; i < n_files; i++) {
+                InvariantNorm invariant1 = invariantsArray.get(i);
+                String si = "";
+                for (var j = i + 1; j < n_files; j++) {
+                    double dist = invariant1.compareInvariants(invariantsArray.get(j), d); // 0 is basic fingerprints
+                    si = si + " " +dist ;
+                }
+                System.err.println(si);
             }
         }
 

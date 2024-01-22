@@ -24,7 +24,7 @@ public class Descriptor {
 
 	private final DescriptorConfig config;
 
-	private double[] geometryDescriptor;
+	private double[] geometryDescriptor;	
 	private double[] momentDescriptor;
 
 	private List<Double> momentsAlign;

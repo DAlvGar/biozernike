@@ -2,6 +2,7 @@ package org.rcsb.biozernike.molecules;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -9,8 +10,13 @@ import java.util.regex.Pattern;
 
 import javax.vecmath.Point3d;
 
+import org.openscience.cdk.io.MDLV2000Writer;
+import org.openscience.cdk.io.SDFWriter;
 import org.openscience.cdk.io.iterator.IteratingSDFReader;
+import org.openscience.cdk.smiles.SmiFlavor;
+import org.openscience.cdk.smiles.SmilesGenerator;
 import org.openscience.cdk.DefaultChemObjectBuilder;
+import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.interfaces.IAtom;
 import org.openscience.cdk.interfaces.IAtomContainer;
 
@@ -22,6 +28,40 @@ public class SDFReader {
 			points[i] = molecule.getAtom(i).getPoint3d();
 		}
         return points;
+    }
+
+    public static Map<String, Object> parseString(String inputString) {
+        Map<String, Object> resultMap = new HashMap<>();
+        String patternString = "(?<molid>[A-Za-z0-9]+)-(?<active>[A-Za-z]+[A-Za-z0-9_]*)\\.(?<conformer>\\d+)";
+        Pattern pattern = Pattern.compile(patternString);
+        Matcher matcher = pattern.matcher(inputString);
+
+        if (matcher.matches()) {
+            String molid = matcher.group("molid");
+            String active_s = matcher.group("active");
+            int conformer = Integer.parseInt(matcher.group("conformer"));
+            Boolean active = false;
+            // Special handling for 'active' field
+            if (active_s.contains("_")) {
+                active_s = active_s.split("_")[0];
+                conformer += 100; // avoid repeated conformer numbers
+            }
+            if (active_s.contains("dec")) {
+               active = false;
+            } else {
+               active = true;
+            }
+
+            // Populate the result map
+            resultMap.put("molid", molid);
+            resultMap.put("active", active);
+            resultMap.put("conformer", conformer);
+            resultMap.put("original", inputString);
+        } else {
+            System.out.println("ERROR WITH: " + inputString);
+        }
+
+        return resultMap;
     }
 
     public static List<List<Double>> getAtomFields(IAtomContainer molecule) {
@@ -56,6 +96,32 @@ public class SDFReader {
             fields.add(afields);
         }
         return fields;
+    }
+
+    public static String getCanonicalSmiles(IAtomContainer molecule) {
+        SmilesGenerator smilesGenerator = new SmilesGenerator(SmiFlavor.UseAromaticSymbols);
+        try {
+            return smilesGenerator.create(molecule);
+        } catch (CDKException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static String getMOLString(IAtomContainer molecule) throws CDKException, IOException {
+        StringWriter writer = new StringWriter();
+        MDLV2000Writer molWriter = new MDLV2000Writer(writer);
+        molWriter.write(molecule);
+        molWriter.close();
+        return writer.toString();
+    }
+
+    public static String getCTABString(IAtomContainer molecule) throws CDKException, IOException {
+        StringWriter writer = new StringWriter();
+        SDFWriter ctabWriter = new SDFWriter(writer);
+        ctabWriter.write(molecule);
+        ctabWriter.close();
+        return writer.toString();
     }
 
     public static IteratingSDFReader read(String path) {

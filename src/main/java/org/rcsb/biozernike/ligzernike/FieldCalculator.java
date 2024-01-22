@@ -56,11 +56,7 @@ public class FieldCalculator {
             { -0.000013, 0.00047916 },
             { -0.00000963, 0.0003646 }
     };
-    // private static CompletableFuture<String> getFieldAsync(IAtomContainer
-    // molecule, int fieldID) {
-    // return CompletableFuture.supplyAsync(() -> getField(molecule, fieldID));
-    // }
-
+    
     public List<Volume> projectMultiField(IAtomContainer molecule, int[] multifieldID) {
         IAtomContainerExtremes moleculeExtremes = getMoleculeExtremes(molecule);
         IGridSize gridSize = getGridSize(moleculeExtremes);
@@ -89,8 +85,6 @@ public class FieldCalculator {
         double[] corner = { gridSize.zeroX * spacing, gridSize.zeroY * spacing, gridSize.zeroZ * spacing };
         int[] dimensions = { gridSize.ix, gridSize.iy, gridSize.iz };
         List<List<Double>> atomParameters = SDFReader.getAtomFields(molecule);
-        System.out.println(moleculeExtremes.toString());
-        System.out.println(gridSize.toString());
         double[] projections = getProjections(molecule, gridSize, atomParameters, fieldID);
         double[] voxelArray = OpenDXIO.rowToColumnFlatten(projections, dimensions); // Transform order
         Volume volume = new Volume();

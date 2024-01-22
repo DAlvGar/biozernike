@@ -235,6 +235,7 @@ public class InvariantNorm {
 			n_abconj = 2;
 		}
 		if (!solver.didConverge()) {
+
 			logger.info("Ratio of a and b_conjugated did not converge with respect to the ({}, {}) normalisation. " +
 					"There is probably a perfect symmetry of the opposing parity. Use another normalisation for alignment.",
 					indZero,indReal);
