@@ -396,18 +396,18 @@ public class LigZernike {
             int order, int nThreads, VectorDatabaseImpl db) throws CDKException {
 
         // Create target in DB if not exists
-        db.insertTarget(target);
+        int targetID = db.insertTarget(target);
 
         try (IteratingSDFReader reader = SDFReader.read(sdfPath)) {
             ExecutorService pool = Executors.newFixedThreadPool(nThreads);
             ConcurrentHashMap<IAtomContainer, String> map = new ConcurrentHashMap<>();
-            RegisterTask task = new RegisterTask(map, maps, db, target, order);
+            RegisterTask task = new RegisterTask(map, maps, db, targetID, order);
             while (reader.hasNext()) {
                 IAtomContainer molecule = reader.next();
                 task.add(molecule);
                 if (task.size() >= 10 || !reader.hasNext()){
                     pool.submit(task);
-                    task = new RegisterTask(map, maps, db, target, order);
+                    task = new RegisterTask(map, maps, db, targetID, order);
                 }
             }
             // Close the SDF reader
