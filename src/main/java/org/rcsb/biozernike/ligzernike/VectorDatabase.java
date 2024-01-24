@@ -23,6 +23,7 @@ public interface VectorDatabase {
     int insertTarget(String targetName);
 
     int insertMolecule(String targetName, String moleculeName, boolean active, String smiles);
+    int insertMolecule(Integer targetID, String moleculeName, boolean active, String smiles);
 
     int insertConformer(Integer moleculeID, Integer conformerNumber, double[] geometricVector, String ctab,
             String originalTitle);
@@ -108,8 +109,14 @@ class VectorDatabaseImpl implements VectorDatabase {
                     "UNIQUE (map_id))");
 
             // Add indexes for better performance
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_target_id ON target(target_id)");
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_target_name ON target(target_name)");
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_molecule_id ON molecule(molecule_id)");
             statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_map_id ON volume_map(map_id)");
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_map_name_conf ON volume_map(map_name, conformer_id)");
             statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_conformer_id ON conformer(conformer_id)");
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_conformer_num_mol ON conformer(molecule_id, conformer_number)");
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_conformer_orig ON conformer(original_title)");
             statement.executeUpdate(
                     "CREATE INDEX IF NOT EXISTS idx_map_id_order_number ON moments(map_id, order_number)");
             statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_map_id_fp ON fp(map_id)");
@@ -184,11 +191,12 @@ class VectorDatabaseImpl implements VectorDatabase {
         return targetId;
     }
 
-    public int getMoleculeId(String moleculeName) {
+    public int getMoleculeId(Integer targetID, String moleculeName) {
         int moleculeId = -1;
         try (PreparedStatement preparedStatement = connection.prepareStatement(
-                "SELECT molecule_id FROM molecule WHERE molecule_name = ?")) {
+                "SELECT molecule_id FROM molecule WHERE molecule_name = ? and target_id = ?;")) {
             preparedStatement.setString(1, moleculeName);
+            preparedStatement.setInt(2, targetID);
             ResultSet resultSet = preparedStatement.executeQuery();
             if (resultSet.next()) {
                 moleculeId = resultSet.getInt(1);
@@ -215,18 +223,40 @@ class VectorDatabaseImpl implements VectorDatabase {
         return conformerID;
     }
 
+    public int getVolumeId(Integer conformerID, String mapName) {
+        int mapID = -1;
+        try (PreparedStatement preparedStatement = connection.prepareStatement(
+                "SELECT map_id FROM volume_map WHERE conformer_id = ? and map_name = ?")) {
+            preparedStatement.setInt(1, conformerID);
+            preparedStatement.setString(2, mapName);
+            ResultSet resultSet = preparedStatement.executeQuery();
+            if (resultSet.next()) {
+                mapID = resultSet.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return mapID;
+    }
+
+
     @Override
     public int insertMolecule(String targetName, String moleculeName, boolean active, String smiles) {
-        int moleculeID = getMoleculeId(moleculeName);
+        int targetID = getTargetId(targetName);
+        return insertMolecule(targetID, moleculeName, active, smiles);
+    };
+    
+    @Override
+    public int insertMolecule(Integer targetID, String moleculeName, boolean active, String smiles) {
+        int moleculeID = getMoleculeId(targetID, moleculeName);
 
         if (moleculeID != -1) {
             // Target already exists, return existing target_id
             return moleculeID;
         }
         try (PreparedStatement preparedStatement = connection.prepareStatement(
-                "INSERT INTO molecule (target_id, molecule_name, active, smiles) VALUES (" +
-                        "(SELECT target_id FROM target WHERE target_name = ?), ?, ?, ?) RETURNING molecule_id")) {
-            preparedStatement.setString(1, targetName.toLowerCase());
+                "INSERT INTO molecule (target_id, molecule_name, active, smiles) VALUES (?, ?, ?, ?) RETURNING molecule_id")) {
+            preparedStatement.setInt(1, targetID);
             preparedStatement.setString(2, moleculeName);
             preparedStatement.setBoolean(3, active);
             preparedStatement.setString(4, smiles);
@@ -284,14 +314,13 @@ class VectorDatabaseImpl implements VectorDatabase {
         return generatedId;
     }
 
-    @Override
-    public int insertMoments(int mapID, int orderNumber, double[] momentsData) {
+
+    public int getMomentId(Integer mapID, Integer orderNumber) {
         int generatedId = -1;
         try (PreparedStatement preparedStatement = connection.prepareStatement(
-                "INSERT INTO moments (map_id, order_number, vector_data) VALUES (?, ?, ?) RETURNING moment_id")) {
+                "SELECT moment_id FROM moments WHERE map_id = ? and order_number = ?")) {
             preparedStatement.setInt(1, mapID);
             preparedStatement.setInt(2, orderNumber);
-            preparedStatement.setObject(3, momentsData);
             ResultSet resultSet = preparedStatement.executeQuery();
             if (resultSet.next()) {
                 generatedId = resultSet.getInt(1);
@@ -299,6 +328,27 @@ class VectorDatabaseImpl implements VectorDatabase {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return generatedId;
+    }
+
+    @Override
+    public int insertMoments(int mapID, int orderNumber, double[] momentsData) {
+        int generatedId = getMomentId(mapID, orderNumber);
+        if (generatedId == -1){
+            try (PreparedStatement preparedStatement = connection.prepareStatement(
+                    "INSERT INTO moments (map_id, order_number, vector_data) VALUES (?, ?, ?) RETURNING moment_id")) {
+                preparedStatement.setInt(1, mapID);
+                preparedStatement.setInt(2, orderNumber);
+                preparedStatement.setObject(3, momentsData);
+                //System.out.println("momentsData: "+momentsData[0]+","+momentsData[1]);
+                ResultSet resultSet = preparedStatement.executeQuery();
+                if (resultSet.next()) {
+                    generatedId = resultSet.getInt(1);
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }        
         return generatedId;
     }
 

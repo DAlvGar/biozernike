@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +27,7 @@ import javax.vecmath.Point3d;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.apache.commons.math3.stat.descriptive.rank.Percentile;
+import org.apache.jena.sparql.function.library.leviathan.radiansToDegrees;
 import org.rcsb.biozernike.AlignmentResult;
 import org.rcsb.biozernike.InvariantNorm;
 import org.rcsb.biozernike.complex.Complex;
@@ -117,22 +119,27 @@ public class LigZernike {
             VectorDatabaseImpl db) {
         InvariantNorm n = new InvariantNorm(volume, order);
         List<Double> fp = n.getFingerprint();
-        Double i = fp.get(0);
+        Double i = fp.get(1);
 
-        if (Double.isNaN(i) | Double.isInfinite(i) | i == null) {
+        if (Double.isNaN(i) || Double.isInfinite(i) || i == null) {
             return; // Moments don't exist, skip volumes insertion
         }
 
         // Store map in conformer
-        int volumeID = db.insertVolumeMap(conformerID, mapName);
-        db.insertFPVector(volumeID, listToArray(fp));
+        int volumeID = db.getVolumeId(conformerID, mapName);
+        if (volumeID == -1) {
+            volumeID = db.insertVolumeMap(conformerID, mapName);
+            db.insertFPVector(volumeID, listToArray(fp));
+        }
 
         for (int invOrder : INVARIANT_ORDERS) {
             List<Double> imoments = n.getInvariants(invOrder);
-            i = imoments.get(0);
-            if (Double.isNaN(i) | Double.isInfinite(i) | i == null) {
-                db.insertMoments(volumeID, invOrder, listToArray(imoments));
+            i = imoments.get(1);
+            if (Double.isNaN(i) || Double.isInfinite(i) || i == null) {
+                continue;
             }
+            // System.out.println("Moments: " + imoments.get(0) + "," + imoments.get(1));
+            db.insertMoments(volumeID, invOrder, listToArray(imoments));
         }
     }
 
@@ -306,6 +313,76 @@ public class LigZernike {
         return listToArray(geomDescriptorList);
     }
 
+    private static class RegisterTask extends ArrayList<IAtomContainer> implements Runnable {
+        private final ConcurrentHashMap<IAtomContainer, String> map;
+        private final HashMap<Integer, String> volmaps;
+        private final VectorDatabaseImpl db;
+        private final Integer targetId;
+        private final FieldCalculator calculator = new FieldCalculator();
+        private final Integer order;
+        private final int[] fieldIDs;
+        private final int NTypes;
+
+        public RegisterTask(ConcurrentHashMap<IAtomContainer, String> map, 
+                            HashMap<Integer, String> volmaps,
+                            VectorDatabaseImpl db, Integer targetId, Integer order) {
+            this.map = map;
+            this.db = db;
+            this.targetId = targetId;
+            this.volmaps = volmaps;
+            this.order=order;
+            this.fieldIDs = this.volmaps.keySet().stream().mapToInt(i -> i).toArray();
+            this.NTypes = this.fieldIDs.length;
+        }
+
+        @Override
+        public void run() {
+            try {
+                for (IAtomContainer m : this) {
+                    String molTitle = m.getTitle();
+                    Map<String, Object> molInfo = SDFReader.parseString(molTitle);
+                    int molid = this.db.getMoleculeId(this.targetId, (String) molInfo.get("molid"));
+                    if (molid == -1) {
+                        String smiles = SDFReader.getCanonicalSmiles(m);
+                        molid = this.db.insertMolecule(this.targetId,  (String) molInfo.get("molid"),
+                                (boolean) molInfo.get("active"), smiles);
+                    }
+                    int confid = this.db.getConformerId(molid, (Integer) molInfo.get("conformer"));
+                    if (confid == -1){
+                        String ctab = SDFReader.getCTABString(m);
+                        confid = this.db.insertConformer(molid, (Integer) molInfo.get("conformer"),
+                                calcGeometricDescriptor(m), ctab, molTitle);
+                    }
+                    List<Volume> volumeList = this.calculator.projectMultiField(m, fieldIDs);
+                    for (int i = 0; i < NTypes; i++) {
+                        String mapname = this.volmaps.get(fieldIDs[i]);
+                        // String key = molecule.getTitle() + "_" + m;
+                        Volume volume = volumeList.get(i);
+                        if (mapname.contains("hydroele")) {
+                            Volume pos = new Volume(volume); // Copy
+                            // NEGATIVE PART and POSITIVE part apart
+                            prepareVolume(volume, 0, 20, true, true, 1.0);
+                            prepareVolume(pos, 0, 20, false, true, 1.0);
+                            calMomentsAndStore_psql(confid, mapname, volume, order, db);
+                            calMomentsAndStore_psql(confid, mapname + "_pos", pos, order, db);
+                        } else if (mapname.contains("hydro")) {
+                            prepareVolume(volume, 0, 20, true, true, 1.0);
+                            calMomentsAndStore_psql(confid, mapname, volume, order, db);
+                        } else {
+                            // hbond maps
+                            prepareVolume(volume, 0, 100, false, false, 10);
+                            calMomentsAndStore_psql(confid, mapname, volume, order, db);
+                        }
+                    }
+                    // been processed
+                    map.put(m, "Done");
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     /**
      * Process sdf file and insert data directly to a PSQL database
      * 
@@ -321,59 +398,28 @@ public class LigZernike {
         // Create target in DB if not exists
         db.insertTarget(target);
 
-        int[] fieldIDs = maps.keySet().stream().mapToInt(i -> i).toArray();
-        int NTypes = fieldIDs.length;
-
         try (IteratingSDFReader reader = SDFReader.read(sdfPath)) {
-            ExecutorService executor = Executors.newFixedThreadPool(nThreads);
-            FieldCalculator calculator = new FieldCalculator();
+            ExecutorService pool = Executors.newFixedThreadPool(nThreads);
+            ConcurrentHashMap<IAtomContainer, String> map = new ConcurrentHashMap<>();
+            RegisterTask task = new RegisterTask(map, maps, db, target, order);
             while (reader.hasNext()) {
                 IAtomContainer molecule = reader.next();
-                String molTitle = molecule.getTitle();
-                Map<String, Object> molInfo = SDFReader.parseString(molTitle);
-                int molid = db.getMoleculeId((String) molInfo.get("molid"));
-                if (molid == -1) {
-                    String smiles = SDFReader.getCanonicalSmiles(molecule);
-                    molid = db.insertMolecule(target, (String) molInfo.get("molid"),
-                            (boolean) molInfo.get("active"), smiles);
+                task.add(molecule);
+                if (task.size() >= 10 || !reader.hasNext()){
+                    pool.submit(task);
+                    task = new RegisterTask(map, maps, db, target, order);
                 }
-                String ctab = SDFReader.getCTABString(molecule);
-                int confid = db.insertConformer(molid, (Integer) molInfo.get("conformer"),
-                        calcGeometricDescriptor(molecule), ctab, molTitle);
-
-                Runnable task = () -> {
-                    List<Volume> volumeList = calculator.projectMultiField(molecule, fieldIDs);
-                    for (int i = 0; i < NTypes; i++) {
-                        String m = maps.get(fieldIDs[i]);
-                        // String key = molecule.getTitle() + "_" + m;
-                        Volume volume = volumeList.get(i);
-                        if (m.contains("hydroele")) {
-                            Volume pos = new Volume(volume); // Copy
-                            // NEGATIVE PART and POSITIVE part apart
-                            prepareVolume(volume, 0, 20, true, true, 1.0);
-                            prepareVolume(pos, 0, 20, false, true, 1.0);
-                            calMomentsAndStore_psql(confid, m, volume, order, db);
-                            calMomentsAndStore_psql(confid, m + "_pos", pos, order, db);
-                        } else if (m.contains("hydro")) {
-                            prepareVolume(volume, 0, 20, true, true, 1.0);
-                            calMomentsAndStore_psql(confid, m, volume, order, db);
-                        } else {
-                            // hbond maps
-                            prepareVolume(volume, 0, 100, false, false, 10);
-                            calMomentsAndStore_psql(confid, m, volume, order, db);
-                        }
-                    }
-                };
-                executor.submit(task);
             }
             // Close the SDF reader
             reader.close();
 
-            executor.shutdown();
+            pool.shutdown();
             try {
-                executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+                if (!pool.awaitTermination(800, TimeUnit.MILLISECONDS)) {
+                    pool.shutdownNow();
+                } 
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                pool.shutdownNow();
             }
 
         } catch (IOException e) {
